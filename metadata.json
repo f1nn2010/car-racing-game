@@ -1,0 +1,6 @@
+{
+  "name": "Coastline Apex",
+  "description": "Sun-drenched 3D Mediterranean coastal GT circuit racer with drift boost, nitro, and rival AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
