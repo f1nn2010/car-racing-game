@@ -12,52 +12,60 @@ interface ControlPoint {
   z: number;
 }
 
-// 1. AMALFI RIVIERA: Sweeping sunlit Mediterranean coastline + cliffside hairpins + seafront straight
+// 1. AMALFI RIVIERA (~2,150m): Long sunlit seafront straight, sweeping headland hairpin,
+// hillside villa esses, elevated belvedere straight & dramatic southern bay carousel!
 const RIVIERA_POINTS: ControlPoint[] = [
-  { x: 0, y: 0.6, z: -48 },
-  { x: 0, y: 0.6, z: 32 },
-  { x: 4, y: 1.0, z: 108 },
-  { x: 44, y: 3.0, z: 166 },
-  { x: 112, y: 5.8, z: 178 },
-  { x: 168, y: 8.2, z: 134 },
-  { x: 172, y: 7.4, z: 62 },
-  { x: 120, y: 4.8, z: 16 },
-  { x: 132, y: 5.2, z: -56 },
-  { x: 104, y: 3.4, z: -128 },
-  { x: 42, y: 1.8, z: -148 },
-  { x: -12, y: 0.9, z: -114 },
+  { x: 0, y: 0.6, z: -120 },
+  { x: 0, y: 0.6, z: 30 },
+  { x: 0, y: 0.8, z: 185 },
+  { x: 18, y: 2.2, z: 315 },
+  { x: 105, y: 4.8, z: 395 },
+  { x: 235, y: 7.4, z: 390 },
+  { x: 355, y: 9.6, z: 305 },
+  { x: 385, y: 8.8, z: 165 },
+  { x: 295, y: 6.4, z: 65 },
+  { x: 355, y: 7.0, z: -65 },
+  { x: 335, y: 5.4, z: -205 },
+  { x: 225, y: 3.6, z: -290 },
+  { x: 90, y: 2.0, z: -295 },
+  { x: -12, y: 1.0, z: -225 },
 ];
 
-// 2. TOKYO WANGAN MIDNIGHT: High-speed bay expressway, elevated suspension bridge straight & sweeping banked loops!
+// 2. TOKYO WANGAN MIDNIGHT (~2,350m): Massive illuminated Rainbow Suspension Bridge straight,
+// wide Odaiba bay loop, neon dockside esses, blazing expressway backstretch & C1 harbor sweeper!
 const TOKYO_POINTS: ControlPoint[] = [
-  { x: 0, y: 3.5, z: -70 },
-  { x: 0, y: 4.2, z: 24 },
-  { x: 0, y: 7.5, z: 135 }, // Soaring Suspension Bridge Straight!
-  { x: 18, y: 6.2, z: 222 }, // Fast Bay Sweeper Entry
-  { x: 96, y: 3.8, z: 246 }, // Wide Neon Sweeper
-  { x: 168, y: 2.5, z: 196 }, // Portside Chicane Entry
-  { x: 146, y: 2.5, z: 116 }, // Dockyard Fast Left
-  { x: 188, y: 3.2, z: 42 }, // Skyline Long Sweeper
-  { x: 166, y: 4.8, z: -58 }, // Elevated Expressway Loop
-  { x: 108, y: 5.6, z: -136 }, // Midnight Overpass Curve
-  { x: 34, y: 4.2, z: -154 }, // Final High-Speed Exit
-  { x: -10, y: 3.6, z: -116 },
+  { x: 0, y: 3.6, z: -130 },
+  { x: 0, y: 4.4, z: 45 },
+  { x: 0, y: 7.8, z: 215 }, // Long soaring Suspension Bridge Straight!
+  { x: 4, y: 6.8, z: 355 }, // Bridge descent into bay sweeper
+  { x: 92, y: 4.2, z: 455 }, // Wide Odaiba Neon Sweeper
+  { x: 245, y: 3.0, z: 445 }, // Bayfront High-Speed Arc
+  { x: 385, y: 2.6, z: 345 }, // Portside Chicane Entry
+  { x: 330, y: 2.8, z: 195 }, // Dockyard Fast Left
+  { x: 425, y: 3.6, z: 50 }, // Skyline Long Sweeper
+  { x: 405, y: 4.8, z: -115 }, // Elevated Expressway Backstretch
+  { x: 315, y: 5.6, z: -255 }, // Midnight Interchange Curve
+  { x: 175, y: 5.0, z: -315 }, // Harbor Overpass Arc
+  { x: 38, y: 4.0, z: -290 }, // Final High-Speed Exit
+  { x: -10, y: 3.6, z: -215 },
 ];
 
-// 3. ALPEN PASS: Dramatic mountain climb, sweeping switchbacks, alpine tunnel gallery & thrilling downhill descent!
+// 3. ALPEN PASS (~2,180m): Valley launch, dramatic mountain climb, high-ridge rock tunnel gallery,
+// summit overlook hairpin, exhilarating downhill switchbacks & glacier valley return!
 const ALPS_POINTS: ControlPoint[] = [
-  { x: 0, y: 1.5, z: -52 },
-  { x: 0, y: 2.2, z: 32 },
-  { x: 6, y: 5.8, z: 112 }, // Steep Alpine Climb
-  { x: 58, y: 11.4, z: 168 }, // Summit Switchback 1
-  { x: 130, y: 16.2, z: 158 }, // High Ridge Straight (Tunnel Section!)
-  { x: 178, y: 18.0, z: 102 }, // Peak Hairpin
-  { x: 132, y: 14.5, z: 46 }, // Alpine S-Curve Downhill
-  { x: 174, y: 11.2, z: -22 }, // Sweeping Valley Overlook
-  { x: 144, y: 7.6, z: -96 }, // Fast Timberland Descent
-  { x: 84, y: 4.8, z: -134 }, // Glacier Creek Bend
-  { x: 24, y: 2.6, z: -124 }, // Final Valley Hairpin
-  { x: -10, y: 1.6, z: -92 },
+  { x: 0, y: 1.6, z: -120 },
+  { x: 0, y: 2.4, z: 40 },
+  { x: 8, y: 6.8, z: 195 }, // Steep Alpine Climb
+  { x: 68, y: 13.5, z: 330 }, // Summit Switchback Entry
+  { x: 195, y: 19.8, z: 385 }, // Alpine Overlook Crest
+  { x: 335, y: 22.8, z: 325 }, // High Ridge Straight (Tunnel Gallery!)
+  { x: 385, y: 21.0, z: 185 }, // Peak Hairpin
+  { x: 280, y: 15.8, z: 85 }, // Mountain S-Curve Downhill
+  { x: 365, y: 12.2, z: -55 }, // Valley Overlook Sweeper
+  { x: 325, y: 8.6, z: -195 }, // Fast Timberland Descent
+  { x: 205, y: 5.6, z: -280 }, // Glacier Creek Bend
+  { x: 75, y: 3.4, z: -275 }, // Alpine Meadow Curve
+  { x: -14, y: 1.9, z: -205 },
 ];
 
 function getControlPoints(trackId: TrackId): ControlPoint[] {
@@ -94,7 +102,33 @@ export interface TrackData {
   };
 }
 
-export function createTrack(trackId: TrackId = 'riviera', sampleCount = 440): TrackData {
+/**
+ * Exact minimum 2D horizontal distance from world point (x, z) to track centerline.
+ * Used to guarantee ZERO scenery/buildings/rocks/trees ever overlap onto the road!
+ */
+export function minDistToTrack(track: TrackData, x: number, z: number, step = 1): number {
+  let minSq = Infinity;
+  const samples = track.samples;
+  for (let i = 0; i < samples.length; i += step) {
+    const s = samples[i];
+    const dx = x - s.x;
+    const dz = z - s.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < minSq) minSq = d2;
+  }
+  return Math.sqrt(minSq);
+}
+
+export function isClearOfTrack(
+  track: TrackData,
+  x: number,
+  z: number,
+  minClearance: number
+): boolean {
+  return minDistToTrack(track, x, z, 2) >= minClearance;
+}
+
+export function createTrack(trackId: TrackId = 'riviera', sampleCount = 720): TrackData {
   const ctrl = getControlPoints(trackId);
   const nCtrl = ctrl.length;
   const rawPts: ControlPoint[] = [];
@@ -176,8 +210,8 @@ export function createTrack(trackId: TrackId = 'riviera', sampleCount = 440): Tr
   }
 
   for (let i = 0; i < sampleCount; i++) {
-    const prev = samples[(i - 2 + sampleCount) % sampleCount];
-    const next = samples[(i + 2) % sampleCount];
+    const prev = samples[(i - 3 + sampleCount) % sampleCount];
+    const next = samples[(i + 3) % sampleCount];
     const cur = samples[i];
     const ds = Math.max(0.5, (next.s - prev.s + totalLength) % totalLength);
     const dtx = next.tx - prev.tx;
@@ -185,14 +219,18 @@ export function createTrack(trackId: TrackId = 'riviera', sampleCount = 440): Tr
     cur.curvature = (dtx * cur.rx + dtz * cur.rz) / ds;
   }
 
-  // Place 6 exciting Apex Boost Pads around each track
+  // Place 10 exciting Apex Boost Pads around each extended circuit
   const padSpecs = [
-    { frac: 0.11, offset: -1.8 },
-    { frac: 0.26, offset: 2.2 },
-    { frac: 0.44, offset: -2.4 },
-    { frac: 0.60, offset: 2.0 },
-    { frac: 0.77, offset: -1.6 },
-    { frac: 0.91, offset: 0.6 },
+    { frac: 0.09, offset: -1.8 },
+    { frac: 0.18, offset: 2.0 },
+    { frac: 0.28, offset: -2.2 },
+    { frac: 0.38, offset: 2.2 },
+    { frac: 0.49, offset: -2.0 },
+    { frac: 0.59, offset: 1.8 },
+    { frac: 0.69, offset: -2.2 },
+    { frac: 0.78, offset: 2.0 },
+    { frac: 0.87, offset: -1.6 },
+    { frac: 0.95, offset: 0.8 },
   ];
 
   const boostPads: BoostPad[] = padSpecs.map((spec, id) => {
@@ -210,21 +248,24 @@ export function createTrack(trackId: TrackId = 'riviera', sampleCount = 440): Tr
     };
   });
 
-  // Place 2 Thrilling Arcade Jump Ramps on fast straights / crests!
+  // Place 3 Thrilling Arcade Jump Ramps on fast straights / crests!
   const rampSpecs =
     trackId === 'tokyo'
       ? [
-          { frac: 0.17, offset: 0.0, launchVy: 11.5 },
-          { frac: 0.68, offset: -1.2, launchVy: 10.5 },
+          { frac: 0.14, offset: 0.0, launchVy: 11.5 },
+          { frac: 0.47, offset: -1.0, launchVy: 10.8 },
+          { frac: 0.76, offset: 0.5, launchVy: 11.2 },
         ]
       : trackId === 'alps'
         ? [
-            { frac: 0.19, offset: 0.5, launchVy: 11.0 },
-            { frac: 0.73, offset: 0.0, launchVy: 11.5 },
+            { frac: 0.14, offset: 0.4, launchVy: 11.0 },
+            { frac: 0.52, offset: -0.6, launchVy: 11.4 },
+            { frac: 0.81, offset: 0.0, launchVy: 11.0 },
           ]
         : [
-            { frac: 0.15, offset: 0.0, launchVy: 10.8 },
-            { frac: 0.65, offset: -0.8, launchVy: 10.5 },
+            { frac: 0.13, offset: 0.0, launchVy: 10.8 },
+            { frac: 0.46, offset: -0.8, launchVy: 10.6 },
+            { frac: 0.77, offset: 0.4, launchVy: 10.8 },
           ];
 
   const jumpRamps: JumpRamp[] = rampSpecs.map((rs, id) => {
@@ -245,19 +286,35 @@ export function createTrack(trackId: TrackId = 'riviera', sampleCount = 440): Tr
     };
   });
 
-  // Automatically place high-visibility outer-edge Corner Chevrons on every sharp turn!
+  // Automatically place high-visibility outer-edge Corner Chevrons cleanly BEHIND the guardrail!
   const cornerChevrons: CornerChevron[] = [];
-  for (let i = 0; i < sampleCount; i += 6) {
+  for (let i = 0; i < sampleCount; i += 8) {
     const smp = samples[i];
-    if (Math.abs(smp.curvature) > 0.014) {
+    if (Math.abs(smp.curvature) > 0.0085) {
       const turnRight = smp.curvature > 0;
       // Outer side of a right turn is LEFT (-rx), outer side of a left turn is RIGHT (+rx)
       const outerSign = turnRight ? -1 : 1;
-      const offset = outerSign * (BARRIER_OFFSET + 1.15);
+      const offset = outerSign * (BARRIER_OFFSET + 2.35);
+      const cx = smp.x + smp.rx * offset;
+      const cz = smp.z + smp.rz * offset;
+
+      // Guarantee chevron & tire barrier stay strictly outside ALL parts of the road corridor
+      let clear = true;
+      for (let k = 0; k < sampleCount; k += 4) {
+        const other = samples[k];
+        const dx = cx - other.x;
+        const dz = cz - other.z;
+        if (dx * dx + dz * dz < (BARRIER_OFFSET + 1.75) * (BARRIER_OFFSET + 1.75)) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear) continue;
+
       cornerChevrons.push({
-        x: smp.x + smp.rx * offset,
+        x: cx,
         y: smp.y,
-        z: smp.z + smp.rz * offset,
+        z: cz,
         heading: Math.atan2(smp.tx, smp.tz),
         turnRight,
       });
@@ -282,7 +339,7 @@ export function createTrack(trackId: TrackId = 'riviera', sampleCount = 440): Tr
 }
 
 // Keep backwards-compatible alias for existing tests/imports
-export function createCoastalTrack(sampleCount = 440): TrackData {
+export function createCoastalTrack(sampleCount = 720): TrackData {
   return createTrack('riviera', sampleCount);
 }
 
@@ -307,7 +364,7 @@ export function projectPointToTrack(
   let bestDistSq = Infinity;
 
   if (hintIndex !== undefined && hintIndex >= 0 && hintIndex < n) {
-    const windowRadius = 28;
+    const windowRadius = 42;
     for (let offset = -windowRadius; offset <= windowRadius; offset++) {
       const idx = (hintIndex + offset + n) % n;
       const s = samples[idx];
@@ -321,7 +378,7 @@ export function projectPointToTrack(
     }
   }
 
-  if (bestDistSq > 480) {
+  if (bestDistSq > 520) {
     bestDistSq = Infinity;
     for (let i = 0; i < n; i++) {
       const s = samples[i];
@@ -364,79 +421,77 @@ export function getSampleAtDistance(track: TrackData, s: number): TrackSample {
 
 /**
  * Map-aware continuous terrain heightfield!
- * - Riviera: coastal beach sloping into Mediterranean sea + inland terracotta hills
- * - Tokyo: bay water basin + reclaimed concrete waterfront piers/islands on east side
- * - Alps: dramatic alpine valley & towering mountain peaks flanking the circuit
+ * Generous flat roadbed clearance (BARRIER_OFFSET + 6.5m) guarantees ZERO hill/terrain triangles
+ * can ever poke through the asphalt, curbs, or track shoulders!
  */
 export function groundHeightAt(track: TrackData, x: number, z: number): number {
   const proj = projectPointToTrack(track, x, z);
   const distToCenter = Math.sqrt(proj.distSq);
 
   if (track.id === 'tokyo') {
-    // Elevated bay expressway over Tokyo Bay water (water sits at y = -1.6)
-    // Reclaimed waterfront land & skyline islands sit on east (x > 65) and far west (x < -85)
-    const eastLand = Math.max(0, Math.min(2.8, (x - 58) * 0.14));
-    const westPier = Math.max(0, Math.min(2.2, (-x - 65) * 0.12));
-    const naturalH = -3.4 + eastLand * 2.1 + westPier * 1.8;
+    // Elevated bay expressway over Tokyo Bay water (water sits at y = -1.65)
+    // Reclaimed waterfront land & skyline islands sit far east (x > 105) and far west (x < -95)
+    const eastLand = Math.max(0, Math.min(2.8, (x - 95) * 0.1));
+    const westPier = Math.max(0, Math.min(2.2, (-x - 95) * 0.1));
+    const naturalH = -3.6 + eastLand * 2.0 + westPier * 1.8;
 
-    // On Tokyo, the road is an elevated highway viaduct, so terrain stays cleanly below road deck
-    return Math.min(proj.y - 0.85, naturalH);
+    return Math.min(proj.y - 1.1, naturalH);
   }
 
   if (track.id === 'alps') {
-    const ridge1 = Math.exp(-((x - 245) * (x - 245) + (z - 95) * (z - 95)) / 7800) * 58;
-    const ridge2 = Math.exp(-((x + 95) * (x + 95) + (z - 190) * (z - 190)) / 9200) * 64;
-    const ridge3 = Math.exp(-((x - 95) * (x - 95) + (z + 230) * (z + 230)) / 10000) * 52;
-    const ridge4 = Math.exp(-((x - 82) * (x - 82) + (z - 40) * (z - 40)) / 2600) * 19;
+    const ridge1 = Math.exp(-((x - 495) * (x - 495) + (z - 220) * (z - 220)) / 24000) * 76;
+    const ridge2 = Math.exp(-((x + 150) * (x + 150) + (z - 340) * (z - 340)) / 28000) * 82;
+    const ridge3 = Math.exp(-((x - 190) * (x - 190) + (z + 420) * (z + 420)) / 28000) * 68;
+    const ridge4 = Math.exp(-((x - 165) * (x - 165) + (z - 80) * (z - 80)) / 9500) * 28;
     const alpineNoise =
-      Math.sin(x * 0.028) * Math.cos(z * 0.025) * 4.5 +
-      Math.abs(Math.sin(x * 0.055 - z * 0.04)) * 3.2;
-    const naturalH = 1.5 + ridge1 + ridge2 + ridge3 + ridge4 + alpineNoise;
+      Math.sin(x * 0.016) * Math.cos(z * 0.015) * 5.2 +
+      Math.abs(Math.sin(x * 0.032 - z * 0.024)) * 3.6;
+    const naturalH = 1.6 + ridge1 + ridge2 + ridge3 + ridge4 + alpineNoise;
 
-    const shoulderStart = ROAD_HALF_WIDTH + CURB_WIDTH + 1.0;
-    const blendWidth = 20.0;
+    const shoulderStart = BARRIER_OFFSET + 6.5;
+    const blendWidth = 34.0;
     if (distToCenter <= shoulderStart) {
-      return proj.y - 0.14;
+      return proj.y - 0.55;
     }
     const t = Math.min(1, (distToCenter - shoulderStart) / blendWidth);
     const smoothT = t * t * (3 - 2 * t);
-    return (proj.y - 0.14) * (1 - smoothT) + naturalH * smoothT;
+    return (proj.y - 0.55) * (1 - smoothT) + naturalH * smoothT;
   }
 
-  // Riviera coastal topography
-  const seaSlope = Math.max(-5.5, Math.min(0, (x + 12) * 0.14));
-  const inlandFactor = Math.max(0, (x - 68) * 0.075);
+  // Riviera coastal topography scaled cleanly for the extended coastal circuit
+  const seaSlope = Math.max(-5.5, Math.min(0, (x + 18) * 0.12));
+  const inlandFactor = Math.max(0, (x - 120) * 0.045);
   const headlandHill =
-    Math.exp(-((x - 16) * (x - 16) + (z - 216) * (z - 216)) / 2400) * 15.0;
+    Math.exp(-((x - 28) * (x - 28) + (z - 445) * (z - 445)) / 7800) * 20.0;
   const easternRidge =
-    Math.exp(-((x - 224) * (x - 224) + (z - 80) * (z - 80)) / 9000) * 26.0;
+    Math.exp(-((x - 485) * (x - 485) + (z - 120) * (z - 120)) / 26000) * 38.0;
   const innerKnoll =
-    Math.exp(-((x - 74) * (x - 74) + (z - 75) * (z - 75)) / 2400) * 9.0;
+    Math.exp(-((x - 165) * (x - 165) + (z - 115) * (z - 115)) / 8200) * 14.0;
 
   const gentleWaves =
-    Math.sin(x * 0.025) * Math.cos(z * 0.022) * 2.2 +
-    Math.sin(x * 0.06 + z * 0.04) * 0.8;
+    Math.sin(x * 0.015) * Math.cos(z * 0.014) * 2.6 +
+    Math.sin(x * 0.035 + z * 0.025) * 0.9;
 
   const naturalH = Math.max(
-    -5.0,
+    -5.2,
     -0.5 + seaSlope + inlandFactor + headlandHill + easternRidge + innerKnoll + gentleWaves
   );
 
-  const shoulderStart = ROAD_HALF_WIDTH + CURB_WIDTH + 1.0;
-  const blendWidth = 18.0;
+  const shoulderStart = BARRIER_OFFSET + 6.5;
+  const blendWidth = 32.0;
   if (distToCenter <= shoulderStart) {
-    return proj.y - 0.12;
+    return proj.y - 0.52;
   }
   const t = Math.min(1, (distToCenter - shoulderStart) / blendWidth);
   const smoothT = t * t * (3 - 2 * t);
-  return (proj.y - 0.12) * (1 - smoothT) + naturalH * smoothT;
+  return (proj.y - 0.52) * (1 - smoothT) + naturalH * smoothT;
 }
 
 export function getStartGridTransform(
   track: TrackData,
   slotIndex: number
 ): { x: number; y: number; z: number; heading: number; sampleIndex: number } {
-  const startS = track.totalLength * 0.062 - slotIndex * 8.2;
+  const startS = track.totalLength * 0.056 - slotIndex * 8.4;
   const wrappedS = ((startS % track.totalLength) + track.totalLength) % track.totalLength;
   const smp = getSampleAtDistance(track, wrappedS);
   const lateral = slotIndex % 2 === 0 ? -2.7 : 2.7;

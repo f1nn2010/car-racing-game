@@ -159,7 +159,7 @@ export class RaceEngine {
     this.callbacks = callbacks;
     this.autoGas = initialOpts.autoGasDefault;
     this.trackId = initialOpts.initialTrack ?? 'riviera';
-    this.track = createTrack(this.trackId, 420);
+    this.track = createTrack(this.trackId, 720);
 
     // Detect software WebGL strictly from renderer string
     this.isSoftwareGl = (() => {
@@ -205,7 +205,7 @@ export class RaceEngine {
       uHorizon: { value: new THREE.Color(0xdce8f4) },
       uSunDir: { value: new THREE.Vector3(-0.45, 0.42, 0.78).normalize() },
     };
-    const skyGeo = new THREE.SphereGeometry(950, 24, 16);
+    const skyGeo = new THREE.SphereGeometry(1850, 24, 16);
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
@@ -236,7 +236,7 @@ export class RaceEngine {
     });
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
 
-    this.camera = new THREE.PerspectiveCamera(62, width / height, 0.25, 1450);
+    this.camera = new THREE.PerspectiveCamera(62, width / height, 0.25, 2800);
 
     // Hemisphere + Directional sun lights (updated per map theme)
     this.hemiLight = new THREE.HemisphereLight(0x9dd1ff, 0x8d7253, 0.95);
@@ -413,7 +413,7 @@ export class RaceEngine {
   public selectTrack(trackId: TrackId): void {
     if (this.trackId === trackId) return;
     this.trackId = trackId;
-    this.track = createTrack(trackId, 420);
+    this.track = createTrack(trackId, 720);
 
     if (this.world) {
       this.scene.remove(this.world.group);

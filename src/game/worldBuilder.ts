@@ -6,6 +6,7 @@ import {
   TrackData,
   getSampleAtDistance,
   groundHeightAt,
+  isClearOfTrack,
 } from './track';
 import { ProceduralTextureSet } from './textures';
 import { TrackId } from './types';
@@ -31,7 +32,7 @@ export function getWorldTheme(trackId: TrackId): WorldTheme {
       skyMid: 0x121938,
       skyHorizon: 0x2f254f,
       fogHex: 0x1b1a36,
-      fogDensity: 0.00145,
+      fogDensity: 0.00078,
       sunColor: 0xffb38a,
       sunIntensity: 1.45,
       hemiSky: 0x5c75d4,
@@ -46,7 +47,7 @@ export function getWorldTheme(trackId: TrackId): WorldTheme {
       skyMid: 0x62a7df,
       skyHorizon: 0xe8dfca,
       fogHex: 0xd0dae6,
-      fogDensity: 0.00135,
+      fogDensity: 0.00068,
       sunColor: 0xffdfa3,
       sunIntensity: 2.35,
       hemiSky: 0x9cd2ff,
@@ -60,7 +61,7 @@ export function getWorldTheme(trackId: TrackId): WorldTheme {
     skyMid: 0x70b4ea,
     skyHorizon: 0xe8dfd0,
     fogHex: 0xc2daf0,
-    fogDensity: 0.00145,
+    fogDensity: 0.00072,
     sunColor: 0xffe4b5,
     sunIntensity: 2.3,
     hemiSky: 0x9cd1ff,
@@ -196,8 +197,10 @@ function buildHorizonPanoramaRing(trackId: TrackId): THREE.Group {
   const isTokyo = trackId === 'tokyo';
   const isAlps = trackId === 'alps';
 
-  const segments = 72;
-  const baseRadius = 460;
+  const centerX = 180;
+  const centerZ = 50;
+  const segments = 84;
+  const baseRadius = 860;
 
   if (isTokyo) {
     // Distant illuminated Tokyo Bay skyline silhouette ring around the entire horizon
@@ -212,45 +215,46 @@ function buildHorizonPanoramaRing(trackId: TrackId): THREE.Group {
     const dummy = new THREE.Object3D();
     for (let i = 0; i < segments; i++) {
       const a = (i / segments) * Math.PI * 2;
-      const r = baseRadius + (i % 5) * 18;
-      const h = 34 + Math.abs(Math.sin(i * 3.7)) * 78 + (i % 7 === 0 ? 45 : 0);
-      const w = 18 + (i % 4) * 7;
-      dummy.position.set(70 + Math.cos(a) * r, h / 2 - 4, 25 + Math.sin(a) * r);
+      const r = baseRadius + (i % 5) * 28;
+      const h = 55 + Math.abs(Math.sin(i * 3.7)) * 115 + (i % 7 === 0 ? 55 : 0);
+      const w = 26 + (i % 4) * 10;
+      dummy.position.set(centerX + Math.cos(a) * r, h / 2 - 4, centerZ + Math.sin(a) * r);
       dummy.rotation.set(0, -a, 0);
-      dummy.scale.set(w, h, 18);
+      dummy.scale.set(w, h, 24);
       dummy.updateMatrix();
       inst.setMatrixAt(i, dummy.matrix);
     }
     inst.instanceMatrix.needsUpdate = true;
+    inst.computeBoundingSphere();
     ring.add(inst);
 
     // Starfield & Glowing Moon overhead!
-    const starCount = 260;
+    const starCount = 320;
     const starPositions = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
-      const theta = Math.abs(Math.sin(i * 12.9898) * 43758.5) % 1 * Math.PI * 2;
+      const theta = (Math.abs(Math.sin(i * 12.9898) * 43758.5) % 1) * Math.PI * 2;
       const phi = 0.2 + (Math.abs(Math.sin(i * 78.233) * 24634.6) % 1) * 1.15;
-      const dist = 620;
-      starPositions[i * 3 + 0] = 70 + Math.cos(theta) * Math.cos(phi) * dist;
+      const dist = 1120;
+      starPositions[i * 3 + 0] = centerX + Math.cos(theta) * Math.cos(phi) * dist;
       starPositions[i * 3 + 1] = Math.sin(phi) * dist;
-      starPositions[i * 3 + 2] = 25 + Math.sin(theta) * Math.cos(phi) * dist;
+      starPositions[i * 3 + 2] = centerZ + Math.sin(theta) * Math.cos(phi) * dist;
     }
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0xe2ecff, size: 2.6, sizeAttenuation: true });
+    const starMat = new THREE.PointsMaterial({ color: 0xe2ecff, size: 3.4, sizeAttenuation: true });
     ring.add(new THREE.Points(starGeo, starMat));
 
     const moon = new THREE.Mesh(
-      new THREE.SphereGeometry(22, 16, 16),
+      new THREE.SphereGeometry(32, 16, 16),
       new THREE.MeshBasicMaterial({ color: 0xfff3cf })
     );
-    moon.position.set(240, 260, 480);
+    moon.position.set(360, 420, 960);
     ring.add(moon);
     return ring;
   }
 
   // Sunlit Riviera Headlands or Majestic Jagged Snow-Capped Alpine Peaks Ring
-  const peakCount = 54;
+  const peakCount = 64;
   const peakGeo = new THREE.ConeGeometry(1, 1, 6);
   const peakMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -272,22 +276,22 @@ function buildHorizonPanoramaRing(trackId: TrackId): THREE.Group {
     const a = (i / peakCount) * Math.PI * 2;
     // On Riviera keep western open ocean gap so you see open sea horizon!
     if (!isAlps && Math.cos(a) < -0.35) {
-      dummy.position.set(0, -200, 0);
+      dummy.position.set(0, -300, 0);
       dummy.scale.setScalar(0.01);
       dummy.updateMatrix();
       peakInst.setMatrixAt(i, dummy.matrix);
       continue;
     }
 
-    const r = baseRadius - 40 + (i % 4) * 32;
+    const r = baseRadius - 60 + (i % 4) * 48;
     const h = isAlps
-      ? 110 + Math.abs(Math.sin(i * 2.9)) * 130
-      : 55 + Math.abs(Math.sin(i * 2.4)) * 68;
-    const w = isAlps ? 82 + (i % 5) * 18 : 95 + (i % 4) * 24;
-    const px = 70 + Math.cos(a) * r;
-    const pz = 25 + Math.sin(a) * r;
+      ? 165 + Math.abs(Math.sin(i * 2.9)) * 185
+      : 82 + Math.abs(Math.sin(i * 2.4)) * 96;
+    const w = isAlps ? 125 + (i % 5) * 28 : 135 + (i % 4) * 34;
+    const px = centerX + Math.cos(a) * r;
+    const pz = centerZ + Math.sin(a) * r;
 
-    dummy.position.set(px, h * 0.42 - 8, pz);
+    dummy.position.set(px, h * 0.42 - 12, pz);
     dummy.rotation.set(0, i * 0.7, 0);
     dummy.scale.set(w, h, w * 0.85);
     dummy.updateMatrix();
@@ -305,7 +309,7 @@ function buildHorizonPanoramaRing(trackId: TrackId): THREE.Group {
     peakInst.setColorAt(i, col);
 
     if (snowInst) {
-      dummy.position.set(px, h * 0.42 - 8 + h * 0.29, pz);
+      dummy.position.set(px, h * 0.42 - 12 + h * 0.29, pz);
       dummy.rotation.set(0, i * 0.7, 0);
       dummy.scale.set(w * 1.02, h * 1.02, w * 0.87);
       dummy.updateMatrix();
@@ -314,9 +318,11 @@ function buildHorizonPanoramaRing(trackId: TrackId): THREE.Group {
   }
   peakInst.instanceMatrix.needsUpdate = true;
   if (peakInst.instanceColor) peakInst.instanceColor.needsUpdate = true;
+  peakInst.computeBoundingSphere();
   ring.add(peakInst);
   if (snowInst) {
     snowInst.instanceMatrix.needsUpdate = true;
+    snowInst.computeBoundingSphere();
     ring.add(snowInst);
   }
 
@@ -329,28 +335,29 @@ function buildHorizonPanoramaRing(trackId: TrackId): THREE.Group {
     emissiveIntensity: 0.16,
   });
   const puffGeo = new THREE.DodecahedronGeometry(1, 1);
-  const cloudInst = new THREE.InstancedMesh(puffGeo, cloudMat, 60);
+  const cloudInst = new THREE.InstancedMesh(puffGeo, cloudMat, 80);
   let ci = 0;
-  for (let c = 0; c < 12; c++) {
-    const angle = (c / 12) * Math.PI * 2 + 0.2;
-    const dist = 260 + (c % 3) * 85;
-    const cx = 70 + Math.cos(angle) * dist;
-    const cy = 115 + (c % 4) * 18;
-    const cz = 25 + Math.sin(angle) * dist;
-    for (let p = 0; p < 5 && ci < 60; p++) {
-      const ox = (p - 2) * 14;
-      const oy = p === 2 ? 6 : p === 1 || p === 3 ? 3 : 0;
-      const oz = ((p % 2) - 0.5) * 9;
-      const sx = p === 2 ? 22 : 16;
-      const sy = p === 2 ? 10 : 7.5;
+  for (let c = 0; c < 16; c++) {
+    const angle = (c / 16) * Math.PI * 2 + 0.2;
+    const dist = 420 + (c % 3) * 145;
+    const cx = centerX + Math.cos(angle) * dist;
+    const cy = 150 + (c % 4) * 22;
+    const cz = centerZ + Math.sin(angle) * dist;
+    for (let p = 0; p < 5 && ci < 80; p++) {
+      const ox = (p - 2) * 20;
+      const oy = p === 2 ? 8 : p === 1 || p === 3 ? 4 : 0;
+      const oz = ((p % 2) - 0.5) * 12;
+      const sx = p === 2 ? 30 : 22;
+      const sy = p === 2 ? 13 : 9.5;
       dummy.position.set(cx + ox, cy + oy, cz + oz);
       dummy.rotation.set(0, c * 0.5, 0);
-      dummy.scale.set(sx, sy, 12);
+      dummy.scale.set(sx, sy, 16);
       dummy.updateMatrix();
       cloudInst.setMatrixAt(ci++, dummy.matrix);
     }
   }
   cloudInst.instanceMatrix.needsUpdate = true;
+  cloudInst.computeBoundingSphere();
   ring.add(cloudInst);
 
   return ring;
@@ -624,27 +631,27 @@ function buildTokyoSuspensionBridge(track: TrackData): THREE.Group {
     emissiveIntensity: 3.4,
   });
 
-  const spanHalf = ROAD_HALF_WIDTH + CURB_WIDTH + 2.4;
-  const towerZs = [72, 152];
-  const towerTopY = 46;
+  const spanHalf = BARRIER_OFFSET + 3.0;
+  const towerZs = [125, 255];
+  const towerTopY = 54;
 
   for (const tz of towerZs) {
     for (const side of [-1, 1]) {
-      const legLower = new THREE.Mesh(new THREE.BoxGeometry(2.6, 26, 3.0), towerWhiteMat);
-      legLower.position.set(side * spanHalf, 12, tz);
+      const legLower = new THREE.Mesh(new THREE.BoxGeometry(2.6, 30, 3.2), towerWhiteMat);
+      legLower.position.set(side * spanHalf, 13, tz);
       bridge.add(legLower);
 
-      const legUpper = new THREE.Mesh(new THREE.BoxGeometry(2.2, 24, 2.6), towerRedMat);
-      legUpper.position.set(side * spanHalf, 35, tz);
+      const legUpper = new THREE.Mesh(new THREE.BoxGeometry(2.2, 26, 2.8), towerRedMat);
+      legUpper.position.set(side * spanHalf, 41, tz);
       bridge.add(legUpper);
 
-      const topLight = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 10), beaconMat);
+      const topLight = new THREE.Mesh(new THREE.SphereGeometry(0.95, 10, 10), beaconMat);
       topLight.position.set(side * spanHalf, towerTopY + 1.8, tz);
       bridge.add(topLight);
     }
 
-    for (const cy of [18, 31, 43]) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(spanHalf * 2 + 2.6, 1.9, 2.1), towerRedMat);
+    for (const cy of [20, 35, 50]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(spanHalf * 2 + 2.6, 2.0, 2.2), towerRedMat);
       beam.position.set(0, cy, tz);
       bridge.add(beam);
     }
@@ -654,27 +661,27 @@ function buildTokyoSuspensionBridge(track: TrackData): THREE.Group {
   for (const side of [-1, 1]) {
     const sx = side * spanHalf;
     const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(sx, 2.2, 16),
-      new THREE.Vector3(sx, towerTopY, 72),
-      new THREE.Vector3(sx, 17.5, 112),
-      new THREE.Vector3(sx, towerTopY, 152),
-      new THREE.Vector3(sx, 2.6, 206),
+      new THREE.Vector3(sx, 3.0, 56),
+      new THREE.Vector3(sx, towerTopY, 125),
+      new THREE.Vector3(sx, 20.0, 190),
+      new THREE.Vector3(sx, towerTopY, 255),
+      new THREE.Vector3(sx, 3.4, 324),
     ]);
-    bridge.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 52, 0.38, 8, false), cableGlowMat));
+    bridge.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 64, 0.40, 8, false), cableGlowMat));
 
-    // Solid concrete cable anchor abutments at both ends so cables never float in mid-air
-    for (const az of [16, 206]) {
-      const anchor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 10, 5.2), anchorConcreteMat);
-      anchor.position.set(sx, -1.6, az);
+    // Solid concrete cable anchor abutments completely outside guardrails
+    for (const az of [56, 324]) {
+      const anchor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 12, 5.8), anchorConcreteMat);
+      anchor.position.set(sx, -1.8, az);
       bridge.add(anchor);
     }
 
     // Vertical suspender hanger cables
-    for (let z = 30; z <= 194; z += 10) {
-      if (Math.abs(z - 72) < 5 || Math.abs(z - 152) < 5) continue;
-      const tNorm = (z - 16) / 190;
+    for (let z = 72; z <= 310; z += 12) {
+      if (Math.abs(z - 125) < 6 || Math.abs(z - 255) < 6) continue;
+      const tNorm = (z - 56) / (324 - 56);
       const pt = curve.getPoint(Math.max(0.02, Math.min(0.98, tNorm)));
-      const deckY = 1.6;
+      const deckY = 2.6;
       const h = Math.max(2, pt.y - deckY);
       const hanger = new THREE.Mesh(
         new THREE.CylinderGeometry(0.08, 0.08, h, 5),
@@ -687,11 +694,11 @@ function buildTokyoSuspensionBridge(track: TrackData): THREE.Group {
 
   // Viaduct concrete support piers cleanly underneath elevated Tokyo Bay highway deck
   const pierMat = new THREE.MeshStandardMaterial({ color: 0x353f50, roughness: 0.82 });
-  for (let i = 0; i < track.samples.length; i += 14) {
+  for (let i = 0; i < track.samples.length; i += 16) {
     const s = track.samples[i];
     const pierH = Math.max(2, s.y + 7.4);
     const pier = new THREE.Mesh(new THREE.BoxGeometry(5.5, pierH, 2.6), pierMat);
-    pier.position.set(s.x, s.y - 0.55 - pierH / 2, s.z);
+    pier.position.set(s.x, s.y - 0.65 - pierH / 2, s.z);
     pier.rotation.y = Math.atan2(s.tx, s.tz);
     bridge.add(pier);
   }
@@ -712,27 +719,31 @@ function buildAlpsRockTunnel(track: TrackData, stoneWallMap: THREE.CanvasTexture
     emissiveIntensity: 3.0,
   });
 
-  const spanHalf = ROAD_HALF_WIDTH + CURB_WIDTH + 1.4;
-  for (let idx = 120; idx <= 165; idx += 5) {
-    const s = track.samples[idx % track.samples.length];
+  // Span cleanly OUTSIDE BARRIER_OFFSET (inner face at BARRIER_OFFSET + 1.2m -> zero road clipping!)
+  const spanHalf = BARRIER_OFFSET + 2.4;
+  const n = track.samples.length;
+  const startIdx = Math.floor(n * 0.30);
+  const endIdx = Math.floor(n * 0.38);
+  for (let idx = startIdx; idx <= endIdx; idx += 3) {
+    const s = track.samples[idx % n];
     const arch = new THREE.Group();
     arch.position.set(s.x, s.y, s.z);
     arch.rotation.y = Math.atan2(s.tx, s.tz);
 
-    const wallR = new THREE.Mesh(new THREE.BoxGeometry(2.4, 8.4, 8.0), stoneMat);
-    wallR.position.set(spanHalf, 4.2, 0);
+    const wallR = new THREE.Mesh(new THREE.BoxGeometry(2.4, 9.2, 9.4), stoneMat);
+    wallR.position.set(spanHalf, 4.6, 0);
     arch.add(wallR);
 
-    const pillarL = new THREE.Mesh(new THREE.BoxGeometry(1.7, 8.4, 2.2), stoneMat);
-    pillarL.position.set(-spanHalf, 4.2, 0);
+    const pillarL = new THREE.Mesh(new THREE.BoxGeometry(1.8, 9.2, 2.6), stoneMat);
+    pillarL.position.set(-spanHalf, 4.6, 0);
     arch.add(pillarL);
 
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(spanHalf * 2 + 3.4, 2.2, 8.2), stoneMat);
-    roof.position.set(0, 8.8, 0);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(spanHalf * 2 + 3.6, 2.2, 9.6), stoneMat);
+    roof.position.set(0, 9.4, 0);
     arch.add(roof);
 
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.25, 0.85), lightMat);
-    lamp.position.set(0, 7.6, 0);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.25, 0.9), lightMat);
+    lamp.position.set(0, 8.2, 0);
     arch.add(lamp);
 
     tunnel.add(arch);
@@ -751,7 +762,8 @@ function buildOverheadSectorBridge(
   g.position.set(s.x, s.y, s.z);
   g.rotation.y = Math.atan2(s.tx, s.tz);
 
-  const spanHalf = ROAD_HALF_WIDTH + CURB_WIDTH + 1.2;
+  // Legs stand strictly outside BARRIER_OFFSET with generous clearance
+  const spanHalf = BARRIER_OFFSET + 1.65;
   const steelMat = new THREE.MeshStandardMaterial({
     color: isTokyo ? 0x2c384f : 0x2a3140,
     metalness: 0.65,
@@ -759,8 +771,8 @@ function buildOverheadSectorBridge(
   });
 
   for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.9, 8.4, 1.0), steelMat);
-    leg.position.set(side * spanHalf, 4.2, 0);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.9, 8.8, 1.0), steelMat);
+    leg.position.set(side * spanHalf, 4.4, 0);
     g.add(leg);
   }
 
@@ -784,7 +796,7 @@ function buildOverheadSectorBridge(
     new THREE.BoxGeometry(spanHalf * 2 + 1.6, isTokyo ? 2.5 : 2.1, 0.9),
     [steelMat, steelMat, steelMat, steelMat, signMat, signMat]
   );
-  deck.position.set(0, 7.6, 0);
+  deck.position.set(0, 7.9, 0);
   g.add(deck);
 
   return g;
@@ -927,8 +939,8 @@ export function buildWorld(
     tireInst.computeBoundingSphere();
     group.add(tireInst);
 
-    // High-Visibility Corner Direction Chevron Signboards above tire stacks!
-    const signGeo = new THREE.BoxGeometry(2.7, 1.35, 0.18);
+    // High-Visibility Corner Direction Chevron Signboards cleanly behind outer guardrail!
+    const signGeo = new THREE.BoxGeometry(2.4, 1.25, 0.16);
     const signMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: textures.chevronMap,
@@ -939,8 +951,10 @@ export function buildWorld(
     });
     const signInst = new THREE.InstancedMesh(signGeo, signMat, track.cornerChevrons.length);
     track.cornerChevrons.forEach((ch, idx) => {
-      dummy.position.set(ch.x, ch.y + 1.85, ch.z);
-      dummy.rotation.set(0, ch.heading + Math.PI, 0);
+      dummy.position.set(ch.x, ch.y + 1.75, ch.z);
+      // Orient mostly parallel to outer barrier, canted gently toward oncoming drivers -> zero guardrail clipping!
+      const yaw = ch.heading + (ch.turnRight ? Math.PI * 0.66 : -Math.PI * 0.66);
+      dummy.rotation.set(0, yaw, 0);
       dummy.scale.set(ch.turnRight ? 1 : -1, 1, 1);
       dummy.updateMatrix();
       signInst.setMatrixAt(idx, dummy.matrix);
@@ -953,11 +967,11 @@ export function buildWorld(
   // =========================================================================
   // 2. TEXTURED CONTINUOUS BIOME TERRAIN & SHIMMERING WATER
   // =========================================================================
-  const terrainSize = 840;
-  const terrainSegs = 104;
+  const terrainSize = 1560;
+  const terrainSegs = 156;
   const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegs, terrainSegs);
   terrainGeo.rotateX(-Math.PI / 2);
-  terrainGeo.translate(70, 0, 25);
+  terrainGeo.translate(180, 0, 50);
 
   const posAttr = terrainGeo.attributes.position;
   const colors = new Float32Array(posAttr.count * 3);
@@ -975,16 +989,16 @@ export function buildWorld(
     posAttr.setY(i, h);
 
     if (isAlps) {
-      if (h < 10) tmpColor.copy(c1).lerp(c2, Math.max(0, h / 10));
-      else if (h < 22) tmpColor.copy(c2).lerp(c3, (h - 10) / 12);
-      else tmpColor.copy(c3).lerp(c4, Math.min(1, (h - 22) / 12));
+      if (h < 12) tmpColor.copy(c1).lerp(c2, Math.max(0, h / 12));
+      else if (h < 25) tmpColor.copy(c2).lerp(c3, (h - 12) / 13);
+      else tmpColor.copy(c3).lerp(c4, Math.min(1, (h - 25) / 14));
     } else if (isTokyo) {
       tmpColor.copy(h > 0 ? c2 : c1);
     } else {
       if (h < -0.3) tmpColor.copy(c1);
-      else if (h < 5.2) tmpColor.copy(c1).lerp(c2, Math.min(1, ((h + 0.3) / 5.5) * 1.15));
-      else if (h < 13.0) tmpColor.copy(c2).lerp(c3, (h - 5.2) / 7.8);
-      else tmpColor.copy(c3).lerp(c4, Math.min(1, (h - 13.0) / 10.0));
+      else if (h < 5.8) tmpColor.copy(c1).lerp(c2, Math.min(1, ((h + 0.3) / 6.1) * 1.15));
+      else if (h < 14.5) tmpColor.copy(c2).lerp(c3, (h - 5.8) / 8.7);
+      else tmpColor.copy(c3).lerp(c4, Math.min(1, (h - 14.5) / 12.0));
     }
     colors[i * 3 + 0] = tmpColor.r;
     colors[i * 3 + 1] = tmpColor.g;
@@ -1010,7 +1024,7 @@ export function buildWorld(
   // Shimmering Water Plane (Mediterranean turquoise / Tokyo Bay midnight)
   const waterUniforms = { uTime: { value: 0 } };
   if (!isAlps) {
-    const waterGeo = new THREE.PlaneGeometry(2000, 2000, 1, 1);
+    const waterGeo = new THREE.PlaneGeometry(3400, 3400, 1, 1);
     waterGeo.rotateX(-Math.PI / 2);
     const waterMat = new THREE.MeshStandardMaterial({
       color: isTokyo ? 0x071834 : 0x097ca6,
@@ -1020,14 +1034,14 @@ export function buildWorld(
       bumpScale: 0.14,
     });
     const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-    waterMesh.position.set(-40, -1.65, 20);
+    waterMesh.position.set(180, -1.65, 50);
     group.add(waterMesh);
   }
 
   // =========================================================================
-  // 3. START / FINISH GANTRY ARCH + 2 OVERHEAD SECTOR BRIDGES
+  // 3. START / FINISH GANTRY ARCH + 3 OVERHEAD SECTOR BRIDGES
   // =========================================================================
-  const startArchSample = getSampleAtDistance(track, track.totalLength * 0.085);
+  const startArchSample = getSampleAtDistance(track, track.totalLength * 0.072);
   const archGroup = new THREE.Group();
   archGroup.position.set(startArchSample.x, startArchSample.y, startArchSample.z);
   archGroup.rotation.y = Math.atan2(startArchSample.tx, startArchSample.tz);
@@ -1038,14 +1052,14 @@ export function buildWorld(
     metalness: 0.25,
   });
   const steelMat = new THREE.MeshStandardMaterial({ color: 0x1e2430, roughness: 0.35, metalness: 0.7 });
-  const spanHalf = ROAD_HALF_WIDTH + CURB_WIDTH + 0.9;
+  const spanHalf = BARRIER_OFFSET + 1.55;
 
   for (const side of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.1, 8.6, 1.3), pillarMat);
-    pillar.position.set(side * spanHalf, 4.3, 0);
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.1, 8.8, 1.3), pillarMat);
+    pillar.position.set(side * spanHalf, 4.4, 0);
     archGroup.add(pillar);
 
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.8), steelMat);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.1, 1.8), steelMat);
     base.position.set(side * spanHalf, 0.55, 0);
     archGroup.add(base);
   }
@@ -1066,12 +1080,12 @@ export function buildWorld(
     bannerMat,
     bannerMat,
   ]);
-  banner.position.set(0, 7.8, 0);
+  banner.position.set(0, 7.9, 0);
   archGroup.add(banner);
 
   const countdownLights: THREE.MeshStandardMaterial[] = [];
   const podHousing = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.72, 0.55), steelMat);
-  podHousing.position.set(0, 6.22, -0.15);
+  podHousing.position.set(0, 6.32, -0.15);
   archGroup.add(podHousing);
 
   for (let i = 0; i < 5; i++) {
@@ -1084,7 +1098,7 @@ export function buildWorld(
     countdownLights.push(lightMat);
     const bulb = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.62, 14), lightMat);
     bulb.rotation.x = Math.PI / 2;
-    bulb.position.set(-2.0 + i * 1.0, 6.22, -0.15);
+    bulb.position.set(-2.0 + i * 1.0, 6.32, -0.15);
     archGroup.add(bulb);
   }
 
@@ -1116,9 +1130,10 @@ export function buildWorld(
   archGroup.add(sfLine);
   group.add(archGroup);
 
-  // Two Overhead Sector Bridges / Japanese Expressway Gantry Signs!
-  group.add(buildOverheadSectorBridge(track, 0.36, isTokyo, textures));
-  group.add(buildOverheadSectorBridge(track, 0.72, isTokyo, textures));
+  // Three Overhead Sector Bridges / Japanese Expressway Gantry Signs along the extended lap!
+  group.add(buildOverheadSectorBridge(track, 0.28, isTokyo, textures));
+  group.add(buildOverheadSectorBridge(track, 0.55, isTokyo, textures));
+  group.add(buildOverheadSectorBridge(track, 0.80, isTokyo, textures));
 
   // =========================================================================
   // 4. BOOST PADS & 3D ARCADE JUMP RAMPS
@@ -1194,33 +1209,41 @@ export function buildWorld(
 
   // =========================================================================
   // 5. MAP-SPECIFIC HERO LANDMARKS, ARCHITECTURE & MULTI-TIER FORESTS
+  //    EVERY prop passes isClearOfTrack() -> ZERO road overlap guaranteed!
   // =========================================================================
   if (track.id === 'riviera') {
     const lh = buildCoastalLighthouse();
-    const lhX = 24;
-    const lhZ = 205;
-    lh.group.position.set(lhX, groundHeightAt(track, lhX, lhZ) - 0.3, lhZ);
-    group.add(lh.group);
-    lighthouseBeacon = lh.beacon;
+    const lhX = 28;
+    const lhZ = 440;
+    if (isClearOfTrack(track, lhX, lhZ, BARRIER_OFFSET + 18)) {
+      lh.group.position.set(lhX, groundHeightAt(track, lhX, lhZ) - 0.3, lhZ);
+      group.add(lh.group);
+      lighthouseBeacon = lh.beacon;
+    }
 
-    const gs = buildTracksideGrandstand(0xd92626);
-    gs.position.set(19, groundHeightAt(track, 19, 12) - 0.1, 12);
-    gs.rotation.y = Math.PI;
-    group.add(gs);
-
-    const gs2 = buildTracksideGrandstand(0x0ea5e9);
-    gs2.position.set(19, groundHeightAt(track, 19, 64) - 0.1, 64);
-    gs2.rotation.y = Math.PI;
-    group.add(gs2);
+    for (const gsSpec of [
+      { x: 25, z: 36, accent: 0xd92626 },
+      { x: 25, z: 98, accent: 0x0ea5e9 },
+      { x: 25, z: -42, accent: 0xf59e0b },
+    ]) {
+      if (!isClearOfTrack(track, gsSpec.x, gsSpec.z, BARRIER_OFFSET + 12)) continue;
+      const gs = buildTracksideGrandstand(gsSpec.accent);
+      gs.position.set(gsSpec.x, groundHeightAt(track, gsSpec.x, gsSpec.z) - 0.1, gsSpec.z);
+      gs.rotation.y = Math.PI;
+      group.add(gs);
+    }
 
     const yachtCoords = [
-      { x: -54, z: 45, rot: 0.4 },
-      { x: -86, z: 118, rot: -0.6 },
-      { x: -68, z: -48, rot: 0.9 },
-      { x: -115, z: 12, rot: -0.2 },
-      { x: -45, z: 155, rot: 0.7 },
+      { x: -72, z: 65, rot: 0.4 },
+      { x: -108, z: 185, rot: -0.6 },
+      { x: -86, z: -78, rot: 0.9 },
+      { x: -145, z: 18, rot: -0.2 },
+      { x: -64, z: 275, rot: 0.7 },
+      { x: -120, z: -175, rot: 0.3 },
+      { x: -95, z: 360, rot: -0.4 },
     ];
     for (const yc of yachtCoords) {
+      if (!isClearOfTrack(track, yc.x, yc.z, BARRIER_OFFSET + 20)) continue;
       const y = buildSailingYacht();
       y.position.set(yc.x, -1.55, yc.z);
       y.rotation.y = yc.rot;
@@ -1229,16 +1252,21 @@ export function buildWorld(
     }
 
     const villaCoords = [
-      { x: 58, z: 68, rot: -0.6, scale: 1.15 },
-      { x: 86, z: 102, rot: -1.1, scale: 1.0 },
-      { x: 192, z: 112, rot: -1.9, scale: 1.2 },
-      { x: 164, z: -28, rot: -2.2, scale: 1.05 },
-      { x: 66, z: -86, rot: 0.4, scale: 1.1 },
-      { x: 42, z: 26, rot: -1.5, scale: 1.0 },
-      { x: 74, z: 138, rot: -0.8, scale: 1.1 },
-      { x: 145, z: 192, rot: -2.5, scale: 1.15 },
+      { x: 75, z: 135, rot: -0.6, scale: 1.2 },
+      { x: 145, z: 220, rot: -1.1, scale: 1.1 },
+      { x: 245, z: 270, rot: -1.6, scale: 1.2 },
+      { x: 425, z: 255, rot: -1.9, scale: 1.25 },
+      { x: 430, z: 110, rot: -2.2, scale: 1.1 },
+      { x: 220, z: 115, rot: -0.8, scale: 1.15 },
+      { x: 185, z: -55, rot: 0.5, scale: 1.2 },
+      { x: 405, z: -145, rot: -2.5, scale: 1.15 },
+      { x: 265, z: -180, rot: 0.9, scale: 1.1 },
+      { x: 125, z: -215, rot: 0.3, scale: 1.15 },
+      { x: 68, z: 30, rot: -1.4, scale: 1.1 },
+      { x: 165, z: 455, rot: -2.9, scale: 1.2 },
     ];
     for (const vc of villaCoords) {
+      if (!isClearOfTrack(track, vc.x, vc.z, BARRIER_OFFSET + 18 * vc.scale)) continue;
       const v = buildMediterraneanVilla(vc.scale);
       v.position.set(vc.x, groundHeightAt(track, vc.x, vc.z) - 0.35, vc.z);
       v.rotation.y = vc.rot;
@@ -1247,30 +1275,43 @@ export function buildWorld(
   } else if (track.id === 'tokyo') {
     group.add(buildTokyoSuspensionBridge(track));
 
-    // Dense Multi-Depth Tokyo Bay Skyscraper Cityscape (26 unique towers with glowing neon crowns!)
+    // Dense Multi-Depth Tokyo Bay Skyscraper Cityscape — EVERY tower checked against track clearance!
     const towerCoords = [
-      { x: 58, z: 130, w: 18, h: 72, d: 18 },
-      { x: 82, z: 82, w: 24, h: 98, d: 22 },
-      { x: 64, z: 26, w: 16, h: 62, d: 18 },
-      { x: 92, z: -30, w: 24, h: 88, d: 22 },
-      { x: 58, z: -84, w: 18, h: 64, d: 18 },
-      { x: 120, z: 168, w: 20, h: 78, d: 20 },
-      { x: 226, z: 156, w: 24, h: 102, d: 24 },
-      { x: 232, z: 86, w: 20, h: 82, d: 22 },
-      { x: 228, z: -12, w: 26, h: 112, d: 24 },
-      { x: 215, z: -86, w: 20, h: 76, d: 20 },
-      { x: -64, z: 168, w: 22, h: 84, d: 22 },
-      { x: -68, z: 96, w: 20, h: 76, d: 20 },
-      { x: -62, z: 18, w: 22, h: 88, d: 22 },
-      { x: -72, z: -64, w: 20, h: 70, d: 20 },
-      { x: -112, z: 140, w: 26, h: 108, d: 24 },
-      { x: -108, z: 45, w: 24, h: 94, d: 22 },
-      { x: 48, z: 288, w: 26, h: 98, d: 24 },
-      { x: 118, z: 292, w: 22, h: 82, d: 22 },
-      { x: 178, z: 262, w: 24, h: 92, d: 22 },
-      { x: 105, z: 48, w: 18, h: 68, d: 18 },
-      { x: 95, z: -188, w: 24, h: 86, d: 22 },
-      { x: 28, z: -198, w: 20, h: 74, d: 20 },
+      // Flanking the long Suspension Bridge straight (east & west bay skylines)
+      { x: 78, z: 280, w: 22, h: 92, d: 22 },
+      { x: 96, z: 185, w: 26, h: 114, d: 24 },
+      { x: 82, z: 95, w: 20, h: 86, d: 20 },
+      { x: 98, z: 10, w: 26, h: 102, d: 24 },
+      { x: 88, z: -90, w: 22, h: 82, d: 22 },
+      { x: 138, z: 225, w: 24, h: 106, d: 24 },
+      { x: 165, z: 115, w: 26, h: 120, d: 24 },
+      { x: 185, z: -15, w: 24, h: 96, d: 22 },
+      { x: 155, z: -145, w: 24, h: 88, d: 22 },
+      // West Bay Towers
+      { x: -78, z: 310, w: 24, h: 98, d: 24 },
+      { x: -82, z: 210, w: 22, h: 92, d: 22 },
+      { x: -78, z: 115, w: 24, h: 108, d: 24 },
+      { x: -84, z: 15, w: 22, h: 86, d: 22 },
+      { x: -86, z: -95, w: 22, h: 78, d: 22 },
+      { x: -136, z: 255, w: 28, h: 124, d: 26 },
+      { x: -132, z: 130, w: 26, h: 112, d: 24 },
+      { x: -128, z: -20, w: 24, h: 96, d: 24 },
+      // Outer East & North Odaiba Waterfront Towers
+      { x: 60, z: 530, w: 28, h: 116, d: 26 },
+      { x: 170, z: 525, w: 26, h: 104, d: 24 },
+      { x: 295, z: 515, w: 28, h: 118, d: 26 },
+      { x: 465, z: 390, w: 26, h: 108, d: 24 },
+      { x: 475, z: 240, w: 24, h: 96, d: 24 },
+      { x: 495, z: 95, w: 28, h: 122, d: 26 },
+      { x: 485, z: -60, w: 26, h: 106, d: 24 },
+      { x: 470, z: -195, w: 24, h: 92, d: 22 },
+      { x: 375, z: -335, w: 26, h: 102, d: 24 },
+      { x: 235, z: -390, w: 28, h: 110, d: 26 },
+      { x: 85, z: -375, w: 24, h: 88, d: 22 },
+      // Inner Bay Plaza Towers (strictly centered in wide open loop interior)
+      { x: 235, z: 295, w: 24, h: 98, d: 24 },
+      { x: 235, z: 65, w: 26, h: 112, d: 24 },
+      { x: 255, z: -115, w: 24, h: 94, d: 22 },
     ];
     const towerMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
@@ -1299,6 +1340,9 @@ export function buildWorld(
     const capMats = [roofCyan, roofPink, roofGold];
 
     towerCoords.forEach((tc, idx) => {
+      const footprintRadius = Math.hypot(tc.w, tc.d) * 0.5;
+      if (!isClearOfTrack(track, tc.x, tc.z, BARRIER_OFFSET + footprintRadius + 10)) return;
+
       const bldg = new THREE.Mesh(new THREE.BoxGeometry(tc.w, tc.h, tc.d), towerMat);
       bldg.position.set(tc.x, tc.h / 2 - 2.0, tc.z);
       group.add(bldg);
@@ -1309,35 +1353,35 @@ export function buildWorld(
       group.add(neonCap);
 
       // Spire antenna on tall skyscrapers
-      if (tc.h > 85) {
-        const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.5, 16, 6), capMat);
-        spire.position.set(tc.x, tc.h + 6.0, tc.z);
+      if (tc.h > 95) {
+        const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.55, 18, 6), capMat);
+        spire.position.set(tc.x, tc.h + 7.0, tc.z);
         group.add(spire);
       }
     });
 
-    // Dual-Side Warm Amber Highway Streetlamps along the Tokyo expressway!
+    // Dual-Side Warm Amber Highway Streetlamps strictly outside guardrails!
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.35 });
     const lampGlowMat = new THREE.MeshStandardMaterial({
       color: 0xfef3c7,
       emissive: 0xfbbf24,
       emissiveIntensity: 3.4,
     });
-    for (let i = 0; i < track.samples.length; i += 10) {
+    for (let i = 0; i < track.samples.length; i += 14) {
       const s = track.samples[i];
-      const side = (i / 10) % 2 === 0 ? -1 : 1;
-      const off = side * (BARRIER_OFFSET + 0.7);
+      const side = (i / 14) % 2 === 0 ? -1 : 1;
+      const off = side * (BARRIER_OFFSET + 1.15);
       const poleGroup = new THREE.Group();
       poleGroup.position.set(s.x + s.rx * off, s.y, s.z + s.rz * off);
       poleGroup.rotation.y = Math.atan2(s.tx, s.tz);
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 8.4, 6), poleMat);
-      mast.position.y = 4.2;
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 8.6, 6), poleMat);
+      mast.position.y = 4.3;
       poleGroup.add(mast);
       const arm = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 0.24), poleMat);
-      arm.position.set(-side * 1.3, 8.25, 0);
+      arm.position.set(-side * 1.3, 8.45, 0);
       poleGroup.add(arm);
       const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.24, 0.48), lampGlowMat);
-      lamp.position.set(-side * 2.2, 8.1, 0);
+      lamp.position.set(-side * 2.2, 8.3, 0);
       poleGroup.add(lamp);
       group.add(poleGroup);
     }
@@ -1345,21 +1389,27 @@ export function buildWorld(
     // ALPEN PASS: Carved Stone Avalanche-Gallery Tunnel + Grandstand + Swiss Timber Chalets
     group.add(buildAlpsRockTunnel(track, textures.stoneWallMap));
 
-    const gs = buildTracksideGrandstand(0xe8a812);
-    gs.position.set(20, groundHeightAt(track, 20, 10) - 0.1, 10);
-    gs.rotation.y = Math.PI;
-    group.add(gs);
+    if (isClearOfTrack(track, 25, 36, BARRIER_OFFSET + 12)) {
+      const gs = buildTracksideGrandstand(0xe8a812);
+      gs.position.set(25, groundHeightAt(track, 25, 36) - 0.1, 36);
+      gs.rotation.y = Math.PI;
+      group.add(gs);
+    }
 
     const chaletCoords = [
-      { x: 46, z: 48, rot: -0.9, scale: 1.15 },
-      { x: 88, z: 72, rot: -1.4, scale: 1.05 },
-      { x: 102, z: -68, rot: 0.6, scale: 1.2 },
-      { x: 38, z: -78, rot: 0.2, scale: 1.0 },
-      { x: -32, z: 44, rot: 1.2, scale: 1.1 },
-      { x: -28, z: -18, rot: 1.5, scale: 1.0 },
-      { x: 74, z: 120, rot: -0.6, scale: 1.1 },
+      { x: 68, z: 95, rot: -0.9, scale: 1.2 },
+      { x: 135, z: 185, rot: -1.4, scale: 1.1 },
+      { x: 215, z: 265, rot: -1.2, scale: 1.15 },
+      { x: 165, z: -75, rot: 0.6, scale: 1.2 },
+      { x: 92, z: -185, rot: 0.2, scale: 1.05 },
+      { x: -55, z: 78, rot: 1.2, scale: 1.15 },
+      { x: -52, z: -45, rot: 1.5, scale: 1.05 },
+      { x: 245, z: -175, rot: 0.9, scale: 1.15 },
+      { x: 430, z: 110, rot: -2.1, scale: 1.2 },
+      { x: 135, z: 45, rot: -0.6, scale: 1.1 },
     ];
     for (const cc of chaletCoords) {
+      if (!isClearOfTrack(track, cc.x, cc.z, BARRIER_OFFSET + 18 * cc.scale)) continue;
       const ch = buildSwissChalet(cc.scale);
       ch.position.set(cc.x, groundHeightAt(track, cc.x, cc.z) - 0.35, cc.z);
       ch.rotation.y = cc.rot;
@@ -1369,36 +1419,29 @@ export function buildWorld(
 
   // =========================================================================
   // 6. MULTI-TIER SCULPTED TREES & LAYERED CLIFF OUTCROPS (Riviera & Alps)
+  //    Strict clearance check guarantees ZERO foliage or rocks touch the road!
   // =========================================================================
   if (!isTokyo) {
     const treeCoords: Array<{ x: number; y: number; z: number; scale: number; isWide: boolean }> = [];
-    const maxTrees = 240;
-    for (let i = 0; i < maxTrees * 2 && treeCoords.length < maxTrees; i++) {
+    const maxTrees = 360;
+    for (let i = 0; i < maxTrees * 3 && treeCoords.length < maxTrees; i++) {
       const a = i * 2.39996;
-      const rad = 18 + Math.sqrt(i) * 14.2;
-      const tx = 75 + Math.cos(a) * rad;
-      const tz = 15 + Math.sin(a) * rad;
+      const rad = 28 + Math.sqrt(i) * 21.5;
+      const tx = 180 + Math.cos(a) * rad;
+      const tz = 50 + Math.sin(a) * rad;
 
-      if (!isAlps && tx < -16) continue;
-      let tooClose = false;
-      for (let k = 0; k < track.samples.length; k += 4) {
-        const s = track.samples[k];
-        const dx = tx - s.x;
-        const dz = tz - s.z;
-        if (dx * dx + dz * dz < 16.5 * 16.5) {
-          tooClose = true;
-          break;
-        }
-      }
-      if (tooClose) continue;
+      if (!isAlps && tx < -22) continue;
+      // Wide canopy clearance: BARRIER_OFFSET (10.9) + 10.5m = 21.4m from centerline!
+      if (!isClearOfTrack(track, tx, tz, BARRIER_OFFSET + 10.5)) continue;
+
       const ty = groundHeightAt(track, tx, tz);
-      if (ty < 0.2 || (isAlps && ty > 36)) continue;
+      if (ty < 0.25 || (isAlps && ty > 44)) continue;
 
       treeCoords.push({
         x: tx,
-        y: ty - 0.15,
+        y: ty - 0.2,
         z: tz,
-        scale: 0.85 + (i % 6) * 0.16,
+        scale: 0.9 + (i % 6) * 0.16,
         isWide: !isAlps && i % 2 === 0,
       });
     }
@@ -1474,7 +1517,7 @@ export function buildWorld(
         dummy.scale.set(sc, sc, sc);
         dummy.updateMatrix();
         tier3Inst.setMatrixAt(idx, dummy.matrix);
-        tier3Inst.setColorAt(idx, tc.y > 11 ? snowTipColor : paletteMid[(idx + 1) % paletteMid.length]);
+        tier3Inst.setColorAt(idx, tc.y > 14 ? snowTipColor : paletteMid[(idx + 1) % paletteMid.length]);
       } else if (tc.isWide) {
         // Mediterranean Umbrella Stone Pine (wide flattened multi-lobe canopy!)
         dummy.position.set(tc.x, tc.y + 4.4 * sc, tc.z);
@@ -1490,7 +1533,7 @@ export function buildWorld(
         tier2Inst.setMatrixAt(idx, dummy.matrix);
         tier2Inst.setColorAt(idx, paletteMid[idx % paletteMid.length]);
 
-        dummy.position.set(0, -200, 0);
+        dummy.position.set(0, -300, 0);
         dummy.scale.setScalar(0.01);
         dummy.updateMatrix();
         tier3Inst.setMatrixAt(idx, dummy.matrix);
@@ -1503,7 +1546,7 @@ export function buildWorld(
         tier1Inst.setMatrixAt(idx, dummy.matrix);
         tier1Inst.setColorAt(idx, paletteDark[idx % paletteDark.length]);
 
-        dummy.position.set(0, -200, 0);
+        dummy.position.set(0, -300, 0);
         dummy.scale.setScalar(0.01);
         dummy.updateMatrix();
         tier2Inst.setMatrixAt(idx, dummy.matrix);
@@ -1521,34 +1564,44 @@ export function buildWorld(
     tier1Inst.instanceMatrix.needsUpdate = true;
     tier2Inst.instanceMatrix.needsUpdate = true;
     tier3Inst.instanceMatrix.needsUpdate = true;
+    trunkInst.computeBoundingSphere();
+    tier1Inst.computeBoundingSphere();
+    tier2Inst.computeBoundingSphere();
+    tier3Inst.computeBoundingSphere();
     if (tier1Inst.instanceColor) tier1Inst.instanceColor.needsUpdate = true;
     if (tier2Inst.instanceColor) tier2Inst.instanceColor.needsUpdate = true;
     if (tier3Inst.instanceColor) tier3Inst.instanceColor.needsUpdate = true;
     group.add(trunkInst, tier1Inst, tier2Inst, tier3Inst);
 
-    // Textured Layered Cliff Rocks (flat-shaded granite / Mediterranean limestone with stoneWallMap!)
+    // Textured Layered Cliff Rocks — EVERY boulder verified strictly clear of road!
     const rockCoords: Array<{ x: number; y: number; z: number; sx: number; sy: number; sz: number }> = [];
-    for (let i = 0; i < 65; i++) {
-      const t = i / 65;
-      const rx = -28 + Math.sin(t * 25.1) * 14 + (i % 2 === 0 ? 0 : 215);
-      const rz = -150 + t * 340;
+    for (let i = 0; i < 160 && rockCoords.length < 85; i++) {
+      const a = i * 1.91;
+      const rad = 45 + Math.sqrt(i) * 32;
+      const rx = 180 + Math.cos(a) * rad;
+      const rz = 50 + Math.sin(a) * rad;
+      const sx = 3.0 + (i % 5) * 1.05;
+      const sy = 1.8 + (i % 4) * 0.75;
+      const sz = 2.6 + (i % 3) * 1.1;
+
+      if (!isClearOfTrack(track, rx, rz, BARRIER_OFFSET + Math.max(sx, sz) + 8.5)) continue;
+
       const ryCenter = groundHeightAt(track, rx, rz);
-      if (ryCenter < -1.8 || (isAlps && ryCenter > 15)) continue;
+      if (ryCenter < -1.6 || (isAlps && ryCenter > 18)) continue;
       const ryMin = Math.min(
         ryCenter,
-        groundHeightAt(track, rx + 4, rz),
-        groundHeightAt(track, rx - 4, rz),
-        groundHeightAt(track, rx, rz + 4),
-        groundHeightAt(track, rx, rz - 4)
+        groundHeightAt(track, rx + 5, rz),
+        groundHeightAt(track, rx - 5, rz),
+        groundHeightAt(track, rx, rz + 5),
+        groundHeightAt(track, rx, rz - 5)
       );
-      const sy = 1.8 + (i % 4) * 0.8;
       rockCoords.push({
         x: rx,
-        y: ryMin - sy * 0.25,
+        y: ryMin - sy * 0.3,
         z: rz,
-        sx: 3.0 + (i % 5) * 1.1,
+        sx,
         sy,
-        sz: 2.6 + (i % 3) * 1.2,
+        sz,
       });
     }
     const rockInst = new THREE.InstancedMesh(
@@ -1573,6 +1626,7 @@ export function buildWorld(
       rockInst.setColorAt(idx, rockColors[idx % rockColors.length]);
     });
     rockInst.instanceMatrix.needsUpdate = true;
+    rockInst.computeBoundingSphere();
     if (rockInst.instanceColor) rockInst.instanceColor.needsUpdate = true;
     group.add(rockInst);
   }

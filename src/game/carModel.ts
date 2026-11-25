@@ -40,62 +40,185 @@ function createExtrudedProfile(
   return geo;
 }
 
+const _spokeUp = new THREE.Vector3(0, 1, 0);
+const _spokeStart = new THREE.Vector3();
+const _spokeEnd = new THREE.Vector3();
+const _spokeDir = new THREE.Vector3();
+
 function buildWheelAssembly(
+  modelId: CarModelId,
   radius: number,
   width: number,
-  spokeCount: number,
   tireMat: THREE.MeshStandardMaterial,
+  barrelMat: THREE.MeshStandardMaterial,
   rimMat: THREE.MeshStandardMaterial,
-  discMat: THREE.MeshStandardMaterial,
+  lipMat: THREE.MeshStandardMaterial,
+  rotorFaceMat: THREE.MeshStandardMaterial,
   caliperMat: THREE.MeshStandardMaterial,
+  centerCapMat: THREE.MeshStandardMaterial,
   isRightSide: boolean
 ): { pivot: THREE.Group; spinner: THREE.Group } {
   const pivot = new THREE.Group();
   const spinner = new THREE.Group();
   pivot.add(spinner);
 
-  const outSign = isRightSide ? -1 : 1; // Driver right is -X in +Z forward space
+  // Driver right is -X in +Z forward space; outSign points outward from the car body
+  const outSign = isRightSide ? -1 : 1;
+  const latheRotZ = outSign > 0 ? -Math.PI / 2 : Math.PI / 2;
 
-  // Wide low-profile Pirelli-style racing slick tire
-  const tireGeo = new THREE.CylinderGeometry(radius, radius, width, 24);
-  tireGeo.rotateZ(Math.PI / 2);
+  // 1. SCULPTED ROUNDED-SHOULDER PERFORMANCE TIRE (LatheGeometry — zero flat hockey-puck edges!)
+  const hw = width * 0.5;
+  const tirePts = [
+    new THREE.Vector2(radius * 0.70, -hw * 0.86),
+    new THREE.Vector2(radius * 0.74, -hw * 0.94),
+    new THREE.Vector2(radius * 0.85, -hw * 1.0),
+    new THREE.Vector2(radius * 0.955, -hw * 0.96),
+    new THREE.Vector2(radius * 0.992, -hw * 0.82),
+    new THREE.Vector2(radius * 1.0, -hw * 0.44),
+    new THREE.Vector2(radius * 1.006, 0),
+    new THREE.Vector2(radius * 1.0, hw * 0.44),
+    new THREE.Vector2(radius * 0.992, hw * 0.82),
+    new THREE.Vector2(radius * 0.955, hw * 0.96),
+    new THREE.Vector2(radius * 0.85, hw * 1.0),
+    new THREE.Vector2(radius * 0.745, hw * 0.94),
+    new THREE.Vector2(radius * 0.715, hw * 0.86),
+    new THREE.Vector2(radius * 0.695, hw * 0.74),
+  ];
+  const tireGeo = new THREE.LatheGeometry(tirePts, 28);
+  tireGeo.rotateZ(latheRotZ);
+  tireGeo.computeVertexNormals();
   const tire = new THREE.Mesh(tireGeo, tireMat);
   tire.castShadow = true;
   spinner.add(tire);
 
-  // Outer sculpted alloy rim lip
-  const lipGeo = new THREE.TorusGeometry(radius * 0.72, radius * 0.065, 8, 22);
+  // 2. DEEP CONCAVE 3D FORGED ALLOY BARREL + STEPPED LIP (LatheGeometry)
+  const barrelPts = [
+    new THREE.Vector2(radius * 0.65, -hw * 0.84),
+    new THREE.Vector2(radius * 0.69, -hw * 0.84),
+    new THREE.Vector2(radius * 0.695, hw * 0.72),
+    new THREE.Vector2(radius * 0.732, hw * 0.86),
+    new THREE.Vector2(radius * 0.732, hw * 0.93),
+    new THREE.Vector2(radius * 0.688, hw * 0.93),
+    new THREE.Vector2(radius * 0.655, hw * 0.72),
+    new THREE.Vector2(radius * 0.64, -hw * 0.78),
+  ];
+  const barrelGeo = new THREE.LatheGeometry(barrelPts, 28);
+  barrelGeo.rotateZ(latheRotZ);
+  barrelGeo.computeVertexNormals();
+  spinner.add(new THREE.Mesh(barrelGeo, barrelMat));
+
+  // Crisp machined outer alloy lip highlight ring
+  const lipGeo = new THREE.TorusGeometry(radius * 0.714, radius * 0.028, 10, 28);
   lipGeo.rotateY(Math.PI / 2);
-  const lip = new THREE.Mesh(lipGeo, rimMat);
-  lip.position.x = outSign * (width * 0.46);
+  const lip = new THREE.Mesh(lipGeo, lipMat);
+  lip.position.x = outSign * (hw * 0.90);
   spinner.add(lip);
 
-  // Ventilated inner brake rotor
-  const discGeo = new THREE.CylinderGeometry(radius * 0.66, radius * 0.66, width * 0.82, 18);
-  discGeo.rotateZ(Math.PI / 2);
-  const disc = new THREE.Mesh(discGeo, discMat);
-  spinner.add(disc);
+  // 3. CROSS-DRILLED CARBON-CERAMIC BRAKE ROTOR (visible gleaming through the concave spokes!)
+  const rotorRadius = radius * 0.57;
+  const rotorGeo = new THREE.CylinderGeometry(rotorRadius, rotorRadius, 0.036, 24);
+  rotorGeo.rotateZ(Math.PI / 2);
+  const rotor = new THREE.Mesh(rotorGeo, [barrelMat, rotorFaceMat, rotorFaceMat]);
+  rotor.position.x = outSign * (hw * 0.14);
+  spinner.add(rotor);
 
-  // Center-lock anodized hub nut
-  const hubGeo = new THREE.CylinderGeometry(radius * 0.16, radius * 0.18, width * 0.96, 12);
-  hubGeo.rotateZ(Math.PI / 2);
-  const hub = new THREE.Mesh(hubGeo, rimMat);
-  spinner.add(hub);
+  // Inner dark rotor hat / hub drum
+  const hatGeo = new THREE.CylinderGeometry(radius * 0.24, radius * 0.26, hw * 0.65, 16);
+  hatGeo.rotateZ(Math.PI / 2);
+  const hat = new THREE.Mesh(hatGeo, barrelMat);
+  hat.position.x = outSign * (hw * 0.12);
+  spinner.add(hat);
 
-  // Sculpted Y/Star spokes
-  const spokeGeo = new THREE.BoxGeometry(0.036, radius * 1.28, 0.048);
-  for (let i = 0; i < spokeCount; i++) {
-    const spoke = new THREE.Mesh(spokeGeo, rimMat);
-    spoke.position.x = outSign * (width * 0.44);
-    spoke.rotation.x = (i / spokeCount) * Math.PI;
-    spinner.add(spoke);
+  // 4. MODEL-AUTHENTIC 3D CONCAVE FORGED SPOKES (angling inward from lip to recessed hub!)
+  const xHub = outSign * (hw * 0.28);
+  const xLip = outSign * (hw * 0.84);
+  const addConcaveSpoke = (
+    angleStart: number,
+    angleEnd: number,
+    rStart: number,
+    rEnd: number,
+    spokeW: number,
+    spokeD: number,
+    mat: THREE.Material
+  ) => {
+    _spokeStart.set(xHub, Math.cos(angleStart) * rStart, Math.sin(angleStart) * rStart);
+    _spokeEnd.set(xLip, Math.cos(angleEnd) * rEnd, Math.sin(angleEnd) * rEnd);
+    _spokeDir.subVectors(_spokeEnd, _spokeStart);
+    const len = _spokeDir.length();
+    const geo = new THREE.BoxGeometry(spokeD, len, spokeW);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.addVectors(_spokeStart, _spokeEnd).multiplyScalar(0.5);
+    mesh.quaternion.setFromUnitVectors(_spokeUp, _spokeDir.normalize());
+    spinner.add(mesh);
+  };
+
+  if (modelId === 'gt3rs') {
+    // Porsche 911 GT3 RS Weissach 5x Split-Y Forged Magnesium Center-Lock Wheels
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      addConcaveSpoke(a - 0.13, a - 0.30, radius * 0.18, radius * 0.70, 0.028, 0.032, rimMat);
+      addConcaveSpoke(a + 0.13, a + 0.30, radius * 0.18, radius * 0.70, 0.028, 0.032, rimMat);
+    }
+  } else if (modelId === 'chiron') {
+    // Bugatti Chiron 10-Spoke Swept Diamond-Cut Turbine Alloy Wheels
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      addConcaveSpoke(a, a + 0.24, radius * 0.17, radius * 0.70, 0.030, 0.034, i % 2 === 0 ? lipMat : rimMat);
+    }
+  } else if (modelId === 'f40') {
+    // Ferrari F40 Classic Deep-Dish 5-Star Speedline Wheels + Perimeter Split-Rim Bolts
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      addConcaveSpoke(a, a, radius * 0.17, radius * 0.68, 0.072, 0.036, rimMat);
+    }
+    const boltGeo = new THREE.CylinderGeometry(0.011, 0.011, 0.018, 6);
+    boltGeo.rotateZ(Math.PI / 2);
+    for (let b = 0; b < 15; b++) {
+      const ba = (b / 15) * Math.PI * 2;
+      const bolt = new THREE.Mesh(boltGeo, lipMat);
+      bolt.position.set(outSign * (hw * 0.85), Math.cos(ba) * radius * 0.665, Math.sin(ba) * radius * 0.665);
+      spinner.add(bolt);
+    }
+  } else {
+    // Lamborghini Aventador SVJ 7-Y Forged Leirion Center-Lock Wheels
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      addConcaveSpoke(a, a - 0.20, radius * 0.18, radius * 0.70, 0.026, 0.032, rimMat);
+      addConcaveSpoke(a, a + 0.20, radius * 0.18, radius * 0.70, 0.026, 0.032, rimMat);
+    }
   }
 
-  // Stationary painted brake caliper (visible behind spokes!)
-  const caliperGeo = new THREE.BoxGeometry(width * 0.36, radius * 0.44, radius * 0.34);
-  const caliper = new THREE.Mesh(caliperGeo, caliperMat);
-  caliper.position.set(outSign * (width * 0.24), radius * 0.14, -radius * 0.34);
-  pivot.add(caliper);
+  // 5. SCULPTED CENTER HUB RING + ANODIZED CENTER-LOCK NUT / CREST CAP
+  const hubRingGeo = new THREE.CylinderGeometry(radius * 0.21, radius * 0.23, 0.06, 16);
+  hubRingGeo.rotateZ(Math.PI / 2);
+  const hubRing = new THREE.Mesh(hubRingGeo, rimMat);
+  hubRing.position.x = outSign * (hw * 0.30);
+  spinner.add(hubRing);
+
+  const lockNutGeo = new THREE.CylinderGeometry(radius * 0.115, radius * 0.13, 0.085, modelId === 'gt3rs' || modelId === 'svj' ? 6 : 16);
+  lockNutGeo.rotateZ(Math.PI / 2);
+  const lockNut = new THREE.Mesh(lockNutGeo, centerCapMat);
+  lockNut.position.x = outSign * (hw * 0.36);
+  spinner.add(lockNut);
+
+  // 6. STATIONARY MULTI-PISTON BREMBO BRAKE CALIPER (hugs upper-rear arc of rotor!)
+  const caliperGroup = new THREE.Group();
+  const caliperMain = new THREE.Mesh(
+    new THREE.BoxGeometry(0.085, radius * 0.36, radius * 0.20),
+    caliperMat
+  );
+  caliperMain.position.set(outSign * (hw * 0.22), radius * 0.22, -radius * 0.42);
+  caliperMain.rotation.x = 0.48;
+  caliperGroup.add(caliperMain);
+
+  const caliperBridge = new THREE.Mesh(
+    new THREE.BoxGeometry(0.092, radius * 0.14, radius * 0.12),
+    lipMat
+  );
+  caliperBridge.position.set(outSign * (hw * 0.23), radius * 0.23, -radius * 0.43);
+  caliperBridge.rotation.x = 0.48;
+  caliperGroup.add(caliperBridge);
+  pivot.add(caliperGroup);
 
   return { pivot, spinner };
 }
@@ -110,14 +233,14 @@ function addWheelArchCutouts(
   darkMat: THREE.MeshStandardMaterial
 ) {
   for (const side of [-1, 1]) {
-    const fWell = new THREE.Mesh(new THREE.CylinderGeometry(rF + 0.06, rF + 0.06, 0.26, 16), darkMat);
+    const fWell = new THREE.Mesh(new THREE.CylinderGeometry(rF + 0.055, rF + 0.055, 0.24, 20), darkMat);
     fWell.rotation.z = Math.PI / 2;
-    fWell.position.set(side * (halfW - 0.04), rF + 0.02, frontZ);
+    fWell.position.set(side * (halfW - 0.15), rF + 0.015, frontZ);
     chassis.add(fWell);
 
-    const rWell = new THREE.Mesh(new THREE.CylinderGeometry(rR + 0.06, rR + 0.06, 0.30, 16), darkMat);
+    const rWell = new THREE.Mesh(new THREE.CylinderGeometry(rR + 0.055, rR + 0.055, 0.28, 20), darkMat);
     rWell.rotation.z = Math.PI / 2;
-    rWell.position.set(side * (halfW - 0.04), rR + 0.02, rearZ);
+    rWell.position.set(side * (halfW - 0.15), rR + 0.015, rearZ);
     chassis.add(rWell);
   }
 }
@@ -182,27 +305,59 @@ export function createCarModel(
   });
 
   const tireMat = new THREE.MeshStandardMaterial({
-    color: 0x16191f,
-    roughness: 0.9,
-    metalness: 0.04,
+    color: 0xffffff,
+    map: textures.tireTreadMap,
+    roughness: 0.88,
+    metalness: 0.05,
+  });
+
+  const barrelMat = new THREE.MeshStandardMaterial({
+    color: modelId === 'f40' ? 0x6b7280 : 0x1d232e,
+    metalness: 0.82,
+    roughness: 0.34,
   });
 
   const rimMat = new THREE.MeshStandardMaterial({
-    color: modelId === 'gt3rs' ? 0xd2d6dc : modelId === 'chiron' ? 0xdde3ec : 0xd8dce2,
-    metalness: 0.9,
-    roughness: 0.18,
+    color:
+      modelId === 'gt3rs'
+        ? 0xa4acb8
+        : modelId === 'chiron'
+          ? 0xd6dde8
+          : modelId === 'f40'
+            ? 0xd8dce4
+            : 0x8e8678, // SVJ satin forged bronze-titanium
+    metalness: 0.92,
+    roughness: 0.22,
   });
 
-  const discMat = new THREE.MeshStandardMaterial({
-    color: 0x525864,
+  const lipMat = new THREE.MeshStandardMaterial({
+    color: 0xeaf0f8,
+    metalness: 0.96,
+    roughness: 0.12,
+  });
+
+  const rotorFaceMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: textures.brakeRotorMap,
     metalness: 0.78,
-    roughness: 0.42,
+    roughness: 0.36,
   });
 
   const caliperMat = new THREE.MeshStandardMaterial({
     color: livery.caliperHex,
-    roughness: 0.32,
-    metalness: 0.3,
+    roughness: 0.28,
+    metalness: 0.35,
+  });
+
+  const centerCapMat = new THREE.MeshStandardMaterial({
+    color:
+      modelId === 'f40'
+        ? 0xfacc15
+        : modelId === 'chiron'
+          ? 0xdc2626
+          : livery.caliperHex,
+    metalness: 0.65,
+    roughness: 0.25,
   });
 
   const headLightMat = new THREE.MeshStandardMaterial({
@@ -846,25 +1001,28 @@ export function createCarModel(
     addWheelArchCutouts(chassis, wheelbaseFrontZ, wheelbaseRearZ, 1.0, wheelRadiusF, wheelRadiusR, darkGrilleMat);
   }
 
-  // 4 Articulated Wheels (bottom sits flush on road y = 0!)
+  // 4 Articulated Sculpted Wheels (bottom sits flush on road y = 0!)
   const frontWheelPivots: THREE.Group[] = [];
   const wheelMeshes: THREE.Object3D[] = [];
   const wheelDefs = [
-    { x: trackWidth, y: wheelRadiusF, z: wheelbaseFrontZ, isFront: true, isRight: false, r: wheelRadiusF, w: 0.30 },
-    { x: -trackWidth, y: wheelRadiusF, z: wheelbaseFrontZ, isFront: true, isRight: true, r: wheelRadiusF, w: 0.30 },
-    { x: trackWidth, y: wheelRadiusR, z: wheelbaseRearZ, isFront: false, isRight: false, r: wheelRadiusR, w: 0.35 },
-    { x: -trackWidth, y: wheelRadiusR, z: wheelbaseRearZ, isFront: false, isRight: true, r: wheelRadiusR, w: 0.35 },
+    { x: trackWidth, y: wheelRadiusF, z: wheelbaseFrontZ, isFront: true, isRight: false, r: wheelRadiusF, w: 0.32 },
+    { x: -trackWidth, y: wheelRadiusF, z: wheelbaseFrontZ, isFront: true, isRight: true, r: wheelRadiusF, w: 0.32 },
+    { x: trackWidth + 0.02, y: wheelRadiusR, z: wheelbaseRearZ, isFront: false, isRight: false, r: wheelRadiusR, w: 0.38 },
+    { x: -(trackWidth + 0.02), y: wheelRadiusR, z: wheelbaseRearZ, isFront: false, isRight: true, r: wheelRadiusR, w: 0.38 },
   ];
 
   for (const wd of wheelDefs) {
     const { pivot, spinner } = buildWheelAssembly(
+      modelId,
       wd.r,
       wd.w,
-      spokeCount,
       tireMat,
+      barrelMat,
       rimMat,
-      discMat,
+      lipMat,
+      rotorFaceMat,
       caliperMat,
+      centerCapMat,
       wd.isRight
     );
     pivot.position.set(wd.x, wd.y, wd.z);
@@ -872,6 +1030,7 @@ export function createCarModel(
     if (wd.isFront) frontWheelPivots.push(pivot);
     wheelMeshes.push(spinner);
   }
+  void spokeCount;
 
   // Grounded soft radial contact shadow disc
   const shadowGeo = new THREE.PlaneGeometry(3.2, 5.5);
@@ -900,9 +1059,12 @@ export function createCarModel(
     accentMat.dispose();
     darkGrilleMat.dispose();
     tireMat.dispose();
+    barrelMat.dispose();
     rimMat.dispose();
-    discMat.dispose();
+    lipMat.dispose();
+    rotorFaceMat.dispose();
     caliperMat.dispose();
+    centerCapMat.dispose();
     headLightMat.dispose();
     tailLightMat.dispose();
     flameMat.dispose();

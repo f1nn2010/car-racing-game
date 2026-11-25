@@ -15,6 +15,8 @@ export interface ProceduralTextureSet {
   adBoardMap: THREE.CanvasTexture;
   highwaySignMap: THREE.CanvasTexture;
   stoneWallMap: THREE.CanvasTexture;
+  tireTreadMap: THREE.CanvasTexture;
+  brakeRotorMap: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -198,7 +200,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const waterBump = new THREE.CanvasTexture(watCanvas);
   waterBump.wrapS = THREE.RepeatWrapping;
   waterBump.wrapT = THREE.RepeatWrapping;
-  waterBump.repeat.set(30, 30);
+  waterBump.repeat.set(48, 48);
 
   // 8. Corner Direction Chevron Signboard Texture
   const [chevCanvas, chCtx] = makeCanvas(256, 128);
@@ -274,7 +276,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   terrainDetailMap.colorSpace = THREE.SRGBColorSpace;
   terrainDetailMap.wrapS = THREE.RepeatWrapping;
   terrainDetailMap.wrapT = THREE.RepeatWrapping;
-  terrainDetailMap.repeat.set(34, 34);
+  terrainDetailMap.repeat.set(58, 58);
   terrainDetailMap.anisotropy = aniso;
 
   // 11. Trackside Motorsport Sponsor Ad Boards (FIA Circuit Aesthetic)
@@ -347,6 +349,81 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   stoneWallMap.repeat.set(2, 2);
   stoneWallMap.anisotropy = aniso;
 
+  // 14. Motorsport Performance Tire Tread & Sidewall Texture
+  const [tireCanvas, tiCtx] = makeCanvas(256, 256);
+  tiCtx.fillStyle = '#181b21';
+  tiCtx.fillRect(0, 0, 256, 256);
+  // Subtle rubber micro-grain
+  for (let i = 0; i < 3200; i++) {
+    const px = Math.abs((Math.sin(i * 19.1) * 43758.5) % 1) * 256;
+    const py = Math.abs((Math.sin(i * 73.7) * 24634.6) % 1) * 256;
+    const v = 18 + (i % 16);
+    tiCtx.fillStyle = `rgb(${v},${v + 1},${v + 3})`;
+    tiCtx.fillRect(px, py, 2, 2);
+  }
+  // 3 longitudinal circumferential rain channels across tread band (y = 80..176)
+  tiCtx.fillStyle = '#0a0c10';
+  for (const gy of [104, 128, 152]) {
+    tiCtx.fillRect(0, gy - 3, 256, 6);
+  }
+  // Angled semi-slick performance shoulder sipes
+  tiCtx.strokeStyle = '#0c0e13';
+  tiCtx.lineWidth = 3;
+  for (let x = 0; x < 256; x += 16) {
+    tiCtx.beginPath();
+    tiCtx.moveTo(x, 76);
+    tiCtx.lineTo(x + 9, 102);
+    tiCtx.moveTo(x, 180);
+    tiCtx.lineTo(x + 9, 154);
+    tiCtx.stroke();
+  }
+  // Subtle satin sidewall accent band
+  tiCtx.fillStyle = 'rgba(42, 47, 56, 0.55)';
+  tiCtx.fillRect(0, 34, 256, 12);
+  tiCtx.fillRect(0, 210, 256, 12);
+  const tireTreadMap = new THREE.CanvasTexture(tireCanvas);
+  tireTreadMap.colorSpace = THREE.SRGBColorSpace;
+  tireTreadMap.wrapS = THREE.RepeatWrapping;
+  tireTreadMap.wrapT = THREE.ClampToEdgeWrapping;
+  tireTreadMap.anisotropy = aniso;
+
+  // 15. Cross-Drilled Carbon-Ceramic Brake Rotor Texture
+  const [rotCanvas, rCtx] = makeCanvas(256, 256);
+  const rCx = 128;
+  const rCy = 128;
+  const rGrad = rCtx.createRadialGradient(rCx, rCy, 22, rCx, rCy, 126);
+  rGrad.addColorStop(0.0, '#1e222a');
+  rGrad.addColorStop(0.38, '#282e38');
+  rGrad.addColorStop(0.42, '#8b94a3');
+  rGrad.addColorStop(0.68, '#b4bdc9');
+  rGrad.addColorStop(0.92, '#7d8694');
+  rGrad.addColorStop(1.0, '#464d59');
+  rCtx.fillStyle = rGrad;
+  rCtx.fillRect(0, 0, 256, 256);
+  // Fine brushed metallic concentric scoring grooves
+  for (let r = 56; r <= 118; r += 4) {
+    rCtx.strokeStyle = r % 8 === 0 ? 'rgba(255,255,255,0.14)' : 'rgba(20,24,32,0.18)';
+    rCtx.lineWidth = 1.2;
+    rCtx.beginPath();
+    rCtx.arc(rCx, rCy, r, 0, Math.PI * 2);
+    rCtx.stroke();
+  }
+  // Swept cross-drilled ventilation hole clusters (12 curved arms x 4 holes)
+  rCtx.fillStyle = '#151922';
+  for (let arm = 0; arm < 12; arm++) {
+    const baseAngle = (arm / 12) * Math.PI * 2;
+    for (let h = 0; h < 4; h++) {
+      const dist = 66 + h * 13;
+      const a = baseAngle + h * 0.075;
+      rCtx.beginPath();
+      rCtx.arc(rCx + Math.cos(a) * dist, rCy + Math.sin(a) * dist, 2.7, 0, Math.PI * 2);
+      rCtx.fill();
+    }
+  }
+  const brakeRotorMap = new THREE.CanvasTexture(rotCanvas);
+  brakeRotorMap.colorSpace = THREE.SRGBColorSpace;
+  brakeRotorMap.anisotropy = aniso;
+
   return {
     asphaltMap,
     asphaltBump,
@@ -362,6 +439,8 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     adBoardMap,
     highwaySignMap,
     stoneWallMap,
+    tireTreadMap,
+    brakeRotorMap,
     dispose: () => {
       asphaltMap.dispose();
       asphaltBump.dispose();
@@ -377,6 +456,8 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
       adBoardMap.dispose();
       highwaySignMap.dispose();
       stoneWallMap.dispose();
+      tireTreadMap.dispose();
+      brakeRotorMap.dispose();
     },
   };
 }
