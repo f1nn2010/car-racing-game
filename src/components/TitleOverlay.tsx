@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CarModelId,
+  GAME_THUMBNAIL_URL,
   GameMode,
   ICONIC_CARS,
   PLAYER_LIVERIES,
@@ -35,98 +36,123 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
 }) => {
   const spec = getCarSpec(selectedCar);
   const trackMeta = getTrackMeta(selectedTrack);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  const markImgFailed = (key: string) => {
+    setFailedImages((prev) => ({ ...prev, [key]: true }));
+  };
 
   return (
-    <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between p-3.5 sm:p-8 lg:p-10">
+    <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between p-3 sm:p-7 lg:p-9">
       {/* Subtle left-edge readability scrim over open sky/road shoulder (no backdrop-filter) */}
       <div
         className="fixed inset-0 pointer-events-none"
         style={{
           background:
-            'linear-gradient(95deg, rgba(11, 18, 28, 0.84) 0%, rgba(11, 18, 28, 0.56) 38%, rgba(11, 18, 28, 0.08) 68%, rgba(11, 18, 28, 0.0) 100%)',
+            'linear-gradient(95deg, rgba(10, 16, 26, 0.86) 0%, rgba(10, 16, 26, 0.54) 38%, rgba(10, 16, 26, 0.06) 66%, rgba(10, 16, 26, 0.0) 100%)',
         }}
       />
 
       {/* Main Left-Third Lockup & Garage Selector */}
-      <div className="relative z-10 w-full max-w-[400px] sm:max-w-[436px] flex flex-col gap-2.5 sm:gap-4 pointer-events-auto my-auto">
-        {/* Bespoke Inline SVG Motorsport Emblem & Title Lockup */}
-        <div className="select-none">
-          <svg
-            viewBox="0 0 420 92"
-            className="w-full max-w-[300px] sm:max-w-[385px] h-auto overflow-visible"
-            role="img"
-            aria-label="Coastline Apex"
+      <div className="relative z-10 w-full max-w-[404px] sm:max-w-[438px] flex flex-col gap-2.5 sm:gap-3.5 pointer-events-auto my-auto">
+        {/* Square 1:1 Cover Thumbnail + Motorsport Title Lockup */}
+        <div className="flex items-center gap-3 select-none">
+          <div
+            className="w-14 h-14 sm:w-[68px] sm:h-[68px] aspect-square rounded-lg overflow-hidden border border-white/25 shrink-0 shadow-lg"
+            style={{
+              background: 'linear-gradient(135deg, #1b283f 0%, #7f1d1d 100%)',
+            }}
           >
-            {/* Racing stripe & apex chevron crest */}
-            <polygon points="0,10 24,10 14,32 0,32" fill="#d92626" />
-            <polygon points="30,10 42,10 32,32 20,32" fill="#f4efe2" />
-            <rect x="48" y="18" width="170" height="3" fill={trackMeta.themeColor} opacity="0.8" />
-            <text
-              x="52"
-              y="14"
-              fill="#f4efe2"
-              opacity="0.92"
-              fontSize="11"
-              fontWeight="700"
-              letterSpacing="3.2"
-              fontFamily="DM Sans, sans-serif"
-            >
-              {trackMeta.name.toUpperCase()} CIRCUIT
-            </text>
+            {!failedImages.cover ? (
+              <img
+                src={GAME_THUMBNAIL_URL}
+                alt="Coastline Apex Square Cover Thumbnail"
+                referrerPolicy="no-referrer"
+                onError={() => markImgFailed('cover')}
+                data-testid="square-game-thumbnail"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center font-display italic font-extrabold text-xl text-white">
+                CA
+              </div>
+            )}
+          </div>
 
-            {/* Primary Display Title */}
-            <text
-              x="0"
-              y="72"
-              fill="#f8f4e8"
-              stroke="#0c131f"
-              strokeWidth="5"
-              paintOrder="stroke fill"
-              fontSize="56"
-              fontWeight="800"
-              fontStyle="italic"
-              letterSpacing="1.5"
-              fontFamily="Barlow Condensed, sans-serif"
+          <div className="flex-1 min-w-0">
+            <svg
+              viewBox="0 0 360 76"
+              className="w-full max-w-[300px] sm:max-w-[345px] h-auto overflow-visible"
+              role="img"
+              aria-label="Coastline Apex"
             >
-              COASTLINE
-            </text>
-            <text
-              x="244"
-              y="72"
-              fill="#ef3b32"
-              stroke="#0c131f"
-              strokeWidth="5"
-              paintOrder="stroke fill"
-              fontSize="56"
-              fontWeight="800"
-              fontStyle="italic"
-              letterSpacing="1.5"
-              fontFamily="Barlow Condensed, sans-serif"
-            >
-              APEX
-            </text>
-            {/* Checkered speed underline */}
-            <rect x="0" y="82" width="346" height="4" fill="#d92626" />
-            <rect x="352" y="82" width="24" height="4" fill="#f4efe2" />
-          </svg>
+              <polygon points="0,6 18,6 11,22 0,22" fill="#d92626" />
+              <polygon points="22,6 32,6 25,22 15,22" fill="#f4efe2" />
+              <text
+                x="40"
+                y="18"
+                fill="#e2e8f0"
+                fontSize="11"
+                fontWeight="700"
+                letterSpacing="2.8"
+                fontFamily="DM Sans, sans-serif"
+              >
+                {trackMeta.name.toUpperCase()} CIRCUIT
+              </text>
+
+              <text
+                x="0"
+                y="62"
+                fill="#f8f4e8"
+                stroke="#0c131f"
+                strokeWidth="4.5"
+                paintOrder="stroke fill"
+                fontSize="50"
+                fontWeight="800"
+                fontStyle="italic"
+                letterSpacing="1.2"
+                fontFamily="Barlow Condensed, sans-serif"
+              >
+                COASTLINE
+              </text>
+              <text
+                x="216"
+                y="62"
+                fill="#ef3b32"
+                stroke="#0c131f"
+                strokeWidth="4.5"
+                paintOrder="stroke fill"
+                fontSize="50"
+                fontWeight="800"
+                fontStyle="italic"
+                letterSpacing="1.2"
+                fontFamily="Barlow Condensed, sans-serif"
+              >
+                APEX
+              </text>
+              <rect x="0" y="70" width="308" height="3.5" fill="#d92626" />
+              <rect x="314" y="70" width="22" height="3.5" fill={trackMeta.themeColor} />
+            </svg>
+          </div>
         </div>
 
         {/* Garage & Circuit Selector Panel (solid rgba, zero backdrop-filter) */}
         <div
-          className="rounded-lg border border-[#f4efe2]/15 p-3 sm:p-4 flex flex-col gap-2.5 sm:gap-3"
-          style={{ backgroundColor: 'rgba(13, 20, 31, 0.90)' }}
+          className="rounded-lg border border-[#f4efe2]/15 p-3 sm:p-3.5 flex flex-col gap-2.5"
+          style={{ backgroundColor: 'rgba(13, 20, 31, 0.91)' }}
         >
-          {/* 3-Map Circuit Selector */}
+          {/* 3-Map Square Thumbnail Circuit Selector */}
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold tracking-[0.18em] uppercase text-[#c7d0dc]">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold tracking-[0.14em] uppercase text-[#c7d0dc]">
                 Select Circuit
               </span>
-              <span className="text-[10px] font-semibold text-[#b8c6d8] truncate max-w-[215px]">
+              <span className="font-medium text-[#b4c3d6] truncate max-w-[225px]">
                 {trackMeta.subtitle}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Select racing circuit">
+
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Select racing circuit">
               {TRACK_LIST.map((trk) => {
                 const active = trk.id === selectedTrack;
                 return (
@@ -137,24 +163,53 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     aria-checked={active}
                     data-testid={`track-${trk.id}`}
                     onClick={() => onSelectTrack(trk.id)}
-                    className={`relative text-left px-2 py-1.5 sm:px-2.5 sm:py-2 rounded border transition-colors cursor-pointer overflow-hidden ${
+                    className={`group relative aspect-square rounded-md overflow-hidden border-2 transition-transform cursor-pointer text-left ${
                       active
-                        ? 'bg-[#223047] border-white/60 text-white'
-                        : 'bg-[#151e2d] border-white/10 text-[#b8c6d8] hover:bg-[#1c273b]'
+                        ? 'border-white scale-[1.02] shadow-md'
+                        : 'border-white/15 opacity-85 hover:opacity-100 hover:border-white/40'
                     }`}
+                    style={{ backgroundColor: '#162032' }}
                   >
+                    {!failedImages[trk.id] ? (
+                      <img
+                        src={trk.thumbnailUrl}
+                        alt={trk.name}
+                        referrerPolicy="no-referrer"
+                        onError={() => markImgFailed(trk.id)}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: `linear-gradient(135deg, #162032 0%, ${trk.themeColor}55 100%)`,
+                        }}
+                      />
+                    )}
+                    {/* Bottom Contrast Scrim for Crisp Title Legibility */}
                     <div
-                      className="absolute inset-x-0 top-0 h-[3px]"
-                      style={{ backgroundColor: active ? trk.themeColor : 'transparent' }}
+                      className="absolute inset-0"
+                      style={{
+                        background:
+                          'linear-gradient(180deg, rgba(10,16,26,0.05) 35%, rgba(10,16,26,0.88) 100%)',
+                      }}
                     />
-                    <div className="font-display italic font-bold text-sm sm:text-base leading-tight">
-                      {trk.shortName}
-                    </div>
-                    <div
-                      className="text-[9px] font-bold tracking-wider uppercase mt-0.5"
-                      style={{ color: active ? trk.themeColor : '#7c8da5' }}
-                    >
-                      {trk.difficulty}
+                    {active && (
+                      <div
+                        className="absolute inset-x-0 top-0 h-[3px]"
+                        style={{ backgroundColor: trk.themeColor }}
+                      />
+                    )}
+                    <div className="relative z-10 h-full flex flex-col justify-end p-2">
+                      <div className="font-display italic font-extrabold text-sm sm:text-base leading-none text-white">
+                        {trk.shortName}
+                      </div>
+                      <div
+                        className="text-[9px] font-bold tracking-wider uppercase mt-0.5"
+                        style={{ color: active ? '#f8f4e8' : '#cbd5e1' }}
+                      >
+                        {trk.difficulty}
+                      </div>
                     </div>
                   </button>
                 );
@@ -164,11 +219,11 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
 
           {/* Iconic Models Grid */}
           <div className="flex flex-col gap-1.5 pt-2 border-t border-white/10">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-[11px] font-bold tracking-[0.18em] uppercase text-[#c7d0dc]">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold tracking-[0.14em] uppercase text-[#c7d0dc]">
                 Select Machine
               </span>
-              <span className="text-[10px] sm:text-[11px] font-semibold text-[#f5c04e]">
+              <span className="font-semibold text-[#f5c04e]">
                 {spec.tagline.split('·')[0].trim()}
               </span>
             </div>
@@ -183,17 +238,17 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     role="radio"
                     aria-checked={active}
                     onClick={() => onSelectCar(car.id)}
-                    className={`text-left px-2.5 py-1.5 sm:py-2 rounded border transition-colors cursor-pointer ${
+                    className={`text-left px-2.5 py-1.5 rounded border transition-colors cursor-pointer ${
                       active
                         ? 'bg-[#d92626] border-[#ff6b63] text-[#fffdf8]'
                         : 'bg-[#1a2434] border-white/10 text-[#d4dce7] hover:bg-[#222f44]'
                     }`}
                   >
-                    <div className="font-display italic font-bold text-base sm:text-lg leading-tight tracking-wide">
+                    <div className="font-display italic font-bold text-base sm:text-[17px] leading-tight tracking-wide">
                       {car.shortName}
                     </div>
                     <div
-                      className={`text-[10px] leading-tight mt-0.5 truncate ${
+                      className={`text-[10px] leading-tight truncate ${
                         active ? 'text-white/85' : 'text-[#8f9eb3]'
                       }`}
                     >
@@ -206,9 +261,9 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           </div>
 
           {/* Selected Car Specs */}
-          <div className="grid grid-cols-3 gap-2 pt-0.5">
+          <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'TOP SPEED', val: spec.statSpeed, color: '#ef4444' },
+              { label: 'SPEED', val: spec.statSpeed, color: '#ef4444' },
               { label: 'HANDLING', val: spec.statHandling, color: '#38bdf8' },
               { label: 'NITRO', val: spec.statNitro, color: '#f59e0b' },
             ].map((bar) => (
@@ -282,7 +337,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           type="button"
           data-start="true"
           onClick={onStart}
-          className="w-full py-3 sm:py-3.5 px-5 sm:px-6 rounded-md bg-[#d92626] hover:bg-[#eb3333] active:bg-[#bd1d1d] border border-[#ff7970]/60 text-[#fffdf8] font-display italic font-extrabold text-2xl tracking-[0.08em] uppercase shadow-lg flex items-center justify-between cursor-pointer transition-colors"
+          className="w-full py-3 px-5 rounded-md bg-[#d92626] hover:bg-[#eb3333] active:bg-[#bd1d1d] border border-[#ff7970]/60 text-[#fffdf8] font-display italic font-extrabold text-2xl tracking-[0.08em] uppercase shadow-lg flex items-center justify-between cursor-pointer transition-colors"
         >
           <span>Start Race</span>
           <span className="text-xs sm:text-sm font-sans not-italic font-semibold tracking-wider text-white/85">
@@ -297,7 +352,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           WASD / Arrows Drive · Space Drift · Shift Nitro · C Camera · Esc Pause
         </span>
         <span className="hidden sm:inline text-[#f4efe2]/75">
-          Slide-to-Steer &amp; Auto-Gas Ready for Mobile
+          Seamless Touch Arrows &amp; Slide Steering Built-In
         </span>
       </div>
     </div>

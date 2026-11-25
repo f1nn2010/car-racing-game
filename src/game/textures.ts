@@ -11,6 +11,10 @@ export interface ProceduralTextureSet {
   waterBump: THREE.CanvasTexture;
   chevronMap: THREE.CanvasTexture;
   skyscraperMap: THREE.CanvasTexture;
+  terrainDetailMap: THREE.CanvasTexture;
+  adBoardMap: THREE.CanvasTexture;
+  highwaySignMap: THREE.CanvasTexture;
+  stoneWallMap: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -25,37 +29,46 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
 export function createProceduralTextures(maxAnisotropy: number): ProceduralTextureSet {
   const aniso = Math.min(16, Math.max(1, maxAnisotropy));
 
-  // 1. High-detail Asphalt + Bump
+  // 1. High-detail Motorsport Tarmac + Rubber Racing Line + Micro-Aggregate Bump
   const [asphCanvas, aCtx] = makeCanvas(512, 512);
-  aCtx.fillStyle = '#333840';
+  aCtx.fillStyle = '#2d323b';
   aCtx.fillRect(0, 0, 512, 512);
 
+  // Subtle worn dual racing-line tire tracks & crown shading
   const laneGrad = aCtx.createLinearGradient(0, 0, 512, 0);
-  laneGrad.addColorStop(0.0, 'rgba(20, 24, 30, 0.25)');
-  laneGrad.addColorStop(0.24, 'rgba(15, 18, 22, 0.35)');
-  laneGrad.addColorStop(0.5, 'rgba(65, 70, 78, 0.14)');
-  laneGrad.addColorStop(0.76, 'rgba(15, 18, 22, 0.35)');
-  laneGrad.addColorStop(1.0, 'rgba(20, 24, 30, 0.25)');
+  laneGrad.addColorStop(0.0, 'rgba(18, 22, 28, 0.35)');
+  laneGrad.addColorStop(0.18, 'rgba(12, 15, 20, 0.42)');
+  laneGrad.addColorStop(0.32, 'rgba(54, 59, 68, 0.16)');
+  laneGrad.addColorStop(0.5, 'rgba(72, 78, 88, 0.18)');
+  laneGrad.addColorStop(0.68, 'rgba(54, 59, 68, 0.16)');
+  laneGrad.addColorStop(0.82, 'rgba(12, 15, 20, 0.42)');
+  laneGrad.addColorStop(1.0, 'rgba(18, 22, 28, 0.35)');
   aCtx.fillStyle = laneGrad;
   aCtx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 9500; i++) {
-    const x = (Math.sin(i * 12.9898) * 43758.5453) % 1;
-    const y = (Math.sin(i * 78.233) * 24634.6345) % 1;
-    const px = Math.abs(x) * 512;
-    const py = Math.abs(y) * 512;
-    const shade = i % 3 === 0 ? 78 : i % 3 === 1 ? 38 : 60;
-    aCtx.fillStyle = `rgba(${shade}, ${shade + 2}, ${shade + 6}, 0.24)`;
-    aCtx.fillRect(px, py, 2, 2);
+  // Fine stone aggregate grain
+  for (let i = 0; i < 12000; i++) {
+    const x = Math.abs((Math.sin(i * 12.9898) * 43758.5453) % 1) * 512;
+    const y = Math.abs((Math.sin(i * 78.233) * 24634.6345) % 1) * 512;
+    const shade = i % 3 === 0 ? 84 : i % 3 === 1 ? 30 : 54;
+    aCtx.fillStyle = `rgba(${shade}, ${shade + 2}, ${shade + 7}, 0.28)`;
+    aCtx.fillRect(x, y, 2, 2);
   }
 
-  aCtx.fillStyle = '#ebe6da';
+  // Subtle longitudinal tarmac tar seams
+  aCtx.fillStyle = 'rgba(12, 14, 18, 0.22)';
+  aCtx.fillRect(170, 0, 3, 512);
+  aCtx.fillRect(340, 0, 3, 512);
+
+  // Crisp bright FIA track edge lines
+  aCtx.fillStyle = '#f2ede2';
   aCtx.fillRect(14, 0, 12, 512);
   aCtx.fillRect(512 - 26, 0, 12, 512);
 
-  aCtx.fillStyle = 'rgba(244, 236, 218, 0.74)';
-  aCtx.fillRect(252, 48, 8, 176);
-  aCtx.fillRect(252, 304, 8, 176);
+  // Clean dashed center lane divider
+  aCtx.fillStyle = 'rgba(246, 240, 226, 0.80)';
+  aCtx.fillRect(252, 42, 8, 178);
+  aCtx.fillRect(252, 298, 8, 178);
 
   const asphaltMap = new THREE.CanvasTexture(asphCanvas);
   asphaltMap.colorSpace = THREE.SRGBColorSpace;
@@ -66,10 +79,10 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const [bumpCanvas, bCtx] = makeCanvas(256, 256);
   bCtx.fillStyle = '#808080';
   bCtx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 6500; i++) {
+  for (let i = 0; i < 7500; i++) {
     const px = Math.abs((Math.sin(i * 41.13) * 91823.1) % 1) * 256;
     const py = Math.abs((Math.sin(i * 19.77) * 51231.7) % 1) * 256;
-    const v = 90 + (i % 85);
+    const v = 80 + (i % 98);
     bCtx.fillStyle = `rgb(${v},${v},${v})`;
     bCtx.fillRect(px, py, 2, 2);
   }
@@ -78,15 +91,15 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   asphaltBump.wrapT = THREE.RepeatWrapping;
   asphaltBump.anisotropy = aniso;
 
-  // 2. Red & Ivory FIA Racing Curb
+  // 2. Red & Ivory FIA Racing Curb with subtle rubber scuff
   const [curbCanvas, cCtx] = makeCanvas(128, 256);
-  cCtx.fillStyle = '#d42c28';
+  cCtx.fillStyle = '#d92924';
   cCtx.fillRect(0, 0, 128, 128);
-  cCtx.fillStyle = '#f2ede2';
+  cCtx.fillStyle = '#f4efe2';
   cCtx.fillRect(0, 128, 128, 128);
-  cCtx.fillStyle = 'rgba(20, 20, 24, 0.16)';
-  cCtx.fillRect(0, 0, 14, 256);
-  cCtx.fillRect(114, 0, 14, 256);
+  cCtx.fillStyle = 'rgba(18, 20, 26, 0.22)';
+  cCtx.fillRect(0, 0, 16, 256);
+  cCtx.fillRect(112, 0, 16, 256);
   const curbMap = new THREE.CanvasTexture(curbCanvas);
   curbMap.colorSpace = THREE.SRGBColorSpace;
   curbMap.wrapS = THREE.RepeatWrapping;
@@ -95,7 +108,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
 
   // 3. Start/Finish Gantry Banner
   const [bannerCanvas, gCtx] = makeCanvas(1024, 256);
-  gCtx.fillStyle = '#141923';
+  gCtx.fillStyle = '#111722';
   gCtx.fillRect(0, 0, 1024, 256);
   const sq = 28;
   for (let row = 0; row < 2; row++) {
@@ -109,7 +122,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   gCtx.fillRect(0, 56, 1024, 10);
   gCtx.fillRect(0, 190, 1024, 10);
   gCtx.fillStyle = '#f8f4e8';
-  gCtx.font = 'italic 800 84px "Barlow Condensed", sans-serif';
+  gCtx.font = 'italic 800 86px "Barlow Condensed", sans-serif';
   gCtx.textAlign = 'center';
   gCtx.textBaseline = 'middle';
   gCtx.fillText('COASTLINE APEX GP', 512, 130);
@@ -120,7 +133,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
 
   // 4. Boost Pad Chevron Texture
   const [padCanvas, pCtx] = makeCanvas(256, 512);
-  pCtx.fillStyle = '#111926';
+  pCtx.fillStyle = '#0e1726';
   pCtx.fillRect(0, 0, 256, 512);
   pCtx.fillStyle = '#0ea5e9';
   pCtx.fillRect(8, 0, 12, 512);
@@ -175,17 +188,17 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const [watCanvas, wCtx] = makeCanvas(256, 256);
   wCtx.fillStyle = '#808080';
   wCtx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 420; i++) {
+  for (let i = 0; i < 480; i++) {
     const x = Math.abs((Math.sin(i * 17.3) * 4123.7) % 1) * 256;
     const y = Math.abs((Math.sin(i * 63.1) * 8721.3) % 1) * 256;
     const w = 14 + (i % 24);
-    wCtx.fillStyle = i % 2 === 0 ? 'rgba(205,205,205,0.24)' : 'rgba(55,55,55,0.24)';
+    wCtx.fillStyle = i % 2 === 0 ? 'rgba(210,210,210,0.28)' : 'rgba(50,50,50,0.28)';
     wCtx.fillRect(x, y, w, 3);
   }
   const waterBump = new THREE.CanvasTexture(watCanvas);
   waterBump.wrapS = THREE.RepeatWrapping;
   waterBump.wrapT = THREE.RepeatWrapping;
-  waterBump.repeat.set(28, 28);
+  waterBump.repeat.set(30, 30);
 
   // 8. Corner Direction Chevron Signboard Texture
   const [chevCanvas, chCtx] = makeCanvas(256, 128);
@@ -210,18 +223,21 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
 
   // 9. Tokyo Midnight Skyscraper Lit Windows Texture
   const [skyCanvas, skCtx] = makeCanvas(256, 512);
-  skCtx.fillStyle = '#0e1526';
+  skCtx.fillStyle = '#0c1222';
   skCtx.fillRect(0, 0, 256, 512);
   for (let row = 0; row < 32; row++) {
+    // Structural floor spandrel bands
+    skCtx.fillStyle = '#141d34';
+    skCtx.fillRect(0, row * 16, 256, 3);
     for (let col = 0; col < 10; col++) {
       const seed = Math.abs(Math.sin(row * 17.7 + col * 31.3) * 43758.5) % 1;
-      if (seed > 0.36) {
+      if (seed > 0.34) {
         skCtx.fillStyle =
-          seed > 0.86 ? '#38bdf8' : seed > 0.68 ? '#f472b6' : seed > 0.5 ? '#fde68a' : '#fef3c7';
-        skCtx.fillRect(10 + col * 24, 6 + row * 16, 14, 9);
+          seed > 0.87 ? '#38bdf8' : seed > 0.72 ? '#fb7185' : seed > 0.48 ? '#fde68a' : '#fef3c7';
+        skCtx.fillRect(10 + col * 24, 5 + row * 16, 14, 9);
       } else {
         skCtx.fillStyle = '#162038';
-        skCtx.fillRect(10 + col * 24, 6 + row * 16, 14, 9);
+        skCtx.fillRect(10 + col * 24, 5 + row * 16, 14, 9);
       }
     }
   }
@@ -230,6 +246,106 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   skyscraperMap.wrapS = THREE.RepeatWrapping;
   skyscraperMap.wrapT = THREE.RepeatWrapping;
   skyscraperMap.anisotropy = aniso;
+
+  // 10. Seamless Organic Terrain Micro-Detail Texture (eliminates flat plastic clay hills!)
+  const [terCanvas, tCtx] = makeCanvas(512, 512);
+  tCtx.fillStyle = '#dcdcdc';
+  tCtx.fillRect(0, 0, 512, 512);
+  // Subtle organic tonal patches
+  for (let i = 0; i < 360; i++) {
+    const x = Math.abs((Math.sin(i * 23.1) * 9123.4) % 1) * 512;
+    const y = Math.abs((Math.sin(i * 51.7) * 6431.2) % 1) * 512;
+    const r = 12 + (i % 34);
+    const v = i % 2 === 0 ? 235 : 196;
+    tCtx.fillStyle = `rgba(${v},${v},${v},0.22)`;
+    tCtx.beginPath();
+    tCtx.arc(x, y, r, 0, Math.PI * 2);
+    tCtx.fill();
+  }
+  // Fine meadow/rock speckles & striations
+  for (let i = 0; i < 9500; i++) {
+    const x = Math.abs((Math.sin(i * 19.31) * 32141.9) % 1) * 512;
+    const y = Math.abs((Math.sin(i * 87.17) * 54123.7) % 1) * 512;
+    const v = i % 3 === 0 ? 155 : i % 3 === 1 ? 245 : 192;
+    tCtx.fillStyle = `rgba(${v},${v},${v},0.28)`;
+    tCtx.fillRect(x, y, i % 4 === 0 ? 4 : 2, 2);
+  }
+  const terrainDetailMap = new THREE.CanvasTexture(terCanvas);
+  terrainDetailMap.colorSpace = THREE.SRGBColorSpace;
+  terrainDetailMap.wrapS = THREE.RepeatWrapping;
+  terrainDetailMap.wrapT = THREE.RepeatWrapping;
+  terrainDetailMap.repeat.set(34, 34);
+  terrainDetailMap.anisotropy = aniso;
+
+  // 11. Trackside Motorsport Sponsor Ad Boards (FIA Circuit Aesthetic)
+  const [adCanvas, adCtx] = makeCanvas(1024, 128);
+  const panels = [
+    { bg: '#131b2b', stripe: '#d92626', text: 'APEX GT', textCol: '#f8f4e8' },
+    { bg: '#f4efe2', stripe: '#131b2b', text: 'WEISSACH', textCol: '#d92626' },
+    { bg: '#0c2340', stripe: '#f5b700', text: 'W16 TURBO', textCol: '#f8f4e8' },
+    { bg: '#b91c1c', stripe: '#f4efe2', text: 'GRAND PRIX', textCol: '#ffffff' },
+  ];
+  panels.forEach((p, idx) => {
+    const ox = idx * 256;
+    adCtx.fillStyle = p.bg;
+    adCtx.fillRect(ox, 0, 256, 128);
+    adCtx.fillStyle = p.stripe;
+    adCtx.fillRect(ox, 0, 256, 14);
+    adCtx.fillRect(ox, 114, 256, 14);
+    adCtx.fillStyle = p.textCol;
+    adCtx.font = 'italic 800 44px "Barlow Condensed", sans-serif';
+    adCtx.textAlign = 'center';
+    adCtx.textBaseline = 'middle';
+    adCtx.fillText(p.text, ox + 128, 66);
+  });
+  const adBoardMap = new THREE.CanvasTexture(adCanvas);
+  adBoardMap.colorSpace = THREE.SRGBColorSpace;
+  adBoardMap.wrapS = THREE.RepeatWrapping;
+  adBoardMap.wrapT = THREE.ClampToEdgeWrapping;
+  adBoardMap.anisotropy = aniso;
+
+  // 12. Tokyo Wangan Green Expressway Overhead Gantry Sign
+  const [hwCanvas, hwCtx] = makeCanvas(1024, 256);
+  hwCtx.fillStyle = '#0a5c36';
+  hwCtx.fillRect(0, 0, 1024, 256);
+  hwCtx.strokeStyle = '#f4f6f8';
+  hwCtx.lineWidth = 10;
+  hwCtx.strokeRect(14, 14, 996, 228);
+  hwCtx.fillStyle = '#0e7490';
+  hwCtx.fillRect(42, 42, 130, 74);
+  hwCtx.fillStyle = '#ffffff';
+  hwCtx.font = '800 46px "Barlow Condensed", sans-serif';
+  hwCtx.textAlign = 'center';
+  hwCtx.textBaseline = 'middle';
+  hwCtx.fillText('B', 107, 80);
+  hwCtx.textAlign = 'left';
+  hwCtx.font = '800 66px "Barlow Condensed", sans-serif';
+  hwCtx.fillText('WANGAN BAYSHORE   C1 LOOP', 200, 88);
+  hwCtx.font = '700 42px "DM Sans", sans-serif';
+  hwCtx.fillStyle = '#fde68a';
+  hwCtx.fillText('ODAIBA  ·  RAINBOW BRIDGE  →  1.2 KM', 200, 174);
+  const highwaySignMap = new THREE.CanvasTexture(hwCanvas);
+  highwaySignMap.colorSpace = THREE.SRGBColorSpace;
+  highwaySignMap.anisotropy = aniso;
+
+  // 13. Carved Alpine Stone Ashlar Texture (Rock Tunnel & Coastal Retaining Walls)
+  const [stCanvas, stCtx] = makeCanvas(256, 256);
+  stCtx.fillStyle = '#6c7076';
+  stCtx.fillRect(0, 0, 256, 256);
+  for (let row = 0; row < 8; row++) {
+    const offset = row % 2 === 0 ? 0 : 32;
+    for (let col = -1; col < 5; col++) {
+      const shade = 92 + ((row * 13 + col * 29) & 31);
+      stCtx.fillStyle = `rgb(${shade}, ${shade - 1}, ${shade - 4})`;
+      stCtx.fillRect(col * 64 + offset + 2, row * 32 + 2, 60, 28);
+    }
+  }
+  const stoneWallMap = new THREE.CanvasTexture(stCanvas);
+  stoneWallMap.colorSpace = THREE.SRGBColorSpace;
+  stoneWallMap.wrapS = THREE.RepeatWrapping;
+  stoneWallMap.wrapT = THREE.RepeatWrapping;
+  stoneWallMap.repeat.set(2, 2);
+  stoneWallMap.anisotropy = aniso;
 
   return {
     asphaltMap,
@@ -242,6 +358,10 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     waterBump,
     chevronMap,
     skyscraperMap,
+    terrainDetailMap,
+    adBoardMap,
+    highwaySignMap,
+    stoneWallMap,
     dispose: () => {
       asphaltMap.dispose();
       asphaltBump.dispose();
@@ -253,6 +373,10 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
       waterBump.dispose();
       chevronMap.dispose();
       skyscraperMap.dispose();
+      terrainDetailMap.dispose();
+      adBoardMap.dispose();
+      highwaySignMap.dispose();
+      stoneWallMap.dispose();
     },
   };
 }

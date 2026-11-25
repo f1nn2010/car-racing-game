@@ -404,27 +404,27 @@ export function stepCarPhysics(
     }
   }
 
-  // Drift state machine (only grounded!)
+  // Drift state machine (only grounded!) — super intuitive & controllable
   const clampedSteer = Math.max(-1, Math.min(1, input.steer));
   const canDrift =
-    !isAirborne && car.speed > 14 && (input.drift || (car.isDrifting && Math.abs(clampedSteer) > 0.14));
-  const enteringDrift = !isAirborne && input.drift && car.speed > 16 && Math.abs(clampedSteer) > 0.1;
+    !isAirborne && car.speed > 13 && (input.drift || (car.isDrifting && Math.abs(clampedSteer) > 0.1));
+  const enteringDrift = !isAirborne && input.drift && car.speed > 14 && Math.abs(clampedSteer) > 0.06;
   const wasDrifting = car.isDrifting;
 
   if (enteringDrift || (wasDrifting && canDrift && input.drift)) {
     car.isDrifting = true;
-    const chargeRate = (0.42 + Math.abs(clampedSteer) * 0.28) * spec.driftBoostMult;
+    const chargeRate = (0.46 + Math.abs(clampedSteer) * 0.3) * spec.driftBoostMult;
     car.driftCharge = Math.min(1.0, car.driftCharge + dt * chargeRate);
     car.driftTier =
-      car.driftCharge >= 0.88 ? 3 : car.driftCharge >= 0.48 ? 2 : car.driftCharge >= 0.2 ? 1 : 0;
-    car.driftPointsRun += Math.round((car.speed * 2.0 + Math.abs(car.driftAngle) * 140) * dt * 10);
-    car.nitro = Math.min(100, car.nitro + dt * 14);
-    car.speed *= 1 - 0.1 * dt;
+      car.driftCharge >= 0.85 ? 3 : car.driftCharge >= 0.45 ? 2 : car.driftCharge >= 0.18 ? 1 : 0;
+    car.driftPointsRun += Math.round((car.speed * 2.1 + Math.abs(car.driftAngle) * 145) * dt * 10);
+    car.nitro = Math.min(100, car.nitro + dt * 15);
+    car.speed *= 1 - 0.075 * dt; // Keep thrilling momentum through drifts!
   } else {
     if (wasDrifting && car.driftTier >= 1) {
-      const turboDur = car.driftTier === 3 ? 1.65 : car.driftTier === 2 ? 1.1 : 0.6;
+      const turboDur = car.driftTier === 3 ? 1.7 : car.driftTier === 2 ? 1.15 : 0.65;
       car.driftMiniTurboTimer = Math.max(car.driftMiniTurboTimer, turboDur);
-      car.nitro = Math.min(100, car.nitro + car.driftTier * 12);
+      car.nitro = Math.min(100, car.nitro + car.driftTier * 13);
       const pts = Math.round(car.driftPointsRun);
       car.totalDriftPoints += pts;
       car.skillScore += pts;
@@ -444,31 +444,33 @@ export function stepCarPhysics(
       car.skillScore += pts;
     }
     car.isDrifting = false;
-    car.driftCharge = Math.max(0, car.driftCharge - dt * 2.5);
+    car.driftCharge = Math.max(0, car.driftCharge - dt * 2.6);
     car.driftTier = 0;
     car.driftPointsRun = 0;
   }
 
-  // Smooth continuous analog steering
-  const speedNorm = Math.min(1, Math.abs(car.speed) / 14);
+  // Smooth speed-sensitive steering (surgical at 320 km/h, agile in hairpins!)
+  const speedNorm = Math.min(1, Math.abs(car.speed) / 11);
   const reverseSign = car.speed >= -0.1 ? 1 : -1;
-  const airSteerMult = isAirborne ? 0.35 : 1.0;
-  const baseTurnRate = (car.isDrifting ? 2.22 : 1.78) * spec.handling * airSteerMult;
-  const highSpeedStability = 1.0 - Math.min(0.28, (Math.abs(car.speed) / 115) * 0.28);
+  const airSteerMult = isAirborne ? 0.4 : 1.0;
+  const brakeTurnBoost = car.braking && !isAirborne ? 1.16 : 1.0;
+  const baseTurnRate = (car.isDrifting ? 2.34 : 1.92) * spec.handling * airSteerMult * brakeTurnBoost;
+  const highSpeedStability = 1.0 - Math.min(0.24, (Math.abs(car.speed) / 120) * 0.24);
   const yawDelta = -clampedSteer * baseTurnRate * speedNorm * highSpeedStability * reverseSign * dt;
   car.heading = normalizeAngle(car.heading + yawDelta);
 
-  const targetSteerVisual = -clampedSteer * 0.44;
-  car.steerAngle += (targetSteerVisual - car.steerAngle) * Math.min(1, dt * 15);
+  const targetSteerVisual = -clampedSteer * 0.46;
+  car.steerAngle += (targetSteerVisual - car.steerAngle) * Math.min(1, dt * 16);
 
-  const targetDriftVisual = car.isDrifting ? -clampedSteer * 0.36 : 0;
-  car.driftAngle += (targetDriftVisual - car.driftAngle) * Math.min(1, dt * 8.0);
+  const targetDriftVisual = car.isDrifting ? -clampedSteer * 0.34 : 0;
+  car.driftAngle += (targetDriftVisual - car.driftAngle) * Math.min(1, dt * 9.5);
 
-  const moveHeading = car.heading - car.driftAngle * 0.45;
+  const moveHeading = car.heading - car.driftAngle * 0.38;
   const targetVx = Math.sin(moveHeading) * car.speed;
   const targetVz = Math.cos(moveHeading) * car.speed;
 
-  const gripLambda = isAirborne ? 1.8 : car.isDrifting ? 5.0 : 12.0 * spec.handling;
+  // Snappier exit grip so releasing drift immediately hooks onto the road!
+  const gripLambda = isAirborne ? 2.0 : car.isDrifting ? 5.8 : 14.5 * spec.handling;
   const blend = 1 - Math.exp(-gripLambda * dt);
   car.vx += (targetVx - car.vx) * blend;
   car.vz += (targetVz - car.vz) * blend;
@@ -483,7 +485,7 @@ export function stepCarPhysics(
   car.lateralOffset = proj.lateralOffset;
   car.y = proj.y;
 
-  // Guardrail soft deflection
+  // Forgiving guardrail glide (redirects cleanly parallel to road without stalling!)
   if (Math.abs(car.lateralOffset) > BARRIER_OFFSET) {
     const sign = Math.sign(car.lateralOffset);
     const excess = Math.abs(car.lateralOffset) - BARRIER_OFFSET;
@@ -493,10 +495,10 @@ export function stepCarPhysics(
 
     const trackHeading = Math.atan2(proj.sample.tx, proj.sample.tz);
     const angleDiff = normalizeAngle(trackHeading - car.heading);
-    car.heading = normalizeAngle(car.heading + angleDiff * Math.min(1, 0.45 + dt * 6));
+    car.heading = normalizeAngle(car.heading + angleDiff * Math.min(1, 0.55 + dt * 7));
 
-    const impactStrength = Math.min(1, (Math.abs(car.speed) / 55) * (0.25 + Math.abs(angleDiff)));
-    const scrapeDrag = Math.exp(-(0.55 + Math.abs(angleDiff) * 2.2) * dt);
+    const impactStrength = Math.min(1, (Math.abs(car.speed) / 58) * (0.22 + Math.abs(angleDiff)));
+    const scrapeDrag = Math.exp(-(0.35 + Math.abs(angleDiff) * 1.55) * dt);
     car.speed *= scrapeDrag;
     car.vx = Math.sin(car.heading) * car.speed;
     car.vz = Math.cos(car.heading) * car.speed;

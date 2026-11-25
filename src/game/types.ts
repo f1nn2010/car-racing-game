@@ -10,6 +10,9 @@ export type CarModelId = 'gt3rs' | 'chiron' | 'f40' | 'svj';
 
 export type TrackId = 'riviera' | 'tokyo' | 'alps';
 
+export const GAME_THUMBNAIL_URL =
+  '/src/assets/images/coastline_apex_thumbnail_1795609180920.jpg';
+
 export interface TrackMeta {
   id: TrackId;
   name: string;
@@ -17,6 +20,7 @@ export interface TrackMeta {
   subtitle: string;
   themeColor: string;
   difficulty: string;
+  thumbnailUrl: string;
 }
 
 export const TRACK_LIST: TrackMeta[] = [
@@ -27,6 +31,7 @@ export const TRACK_LIST: TrackMeta[] = [
     subtitle: 'Sunlit Seafront & Cliff Hairpins',
     themeColor: '#0ea5e9',
     difficulty: 'FAST FLOW',
+    thumbnailUrl: '/src/assets/images/map_thumb_riviera_1795609182238.jpg',
   },
   {
     id: 'tokyo',
@@ -35,6 +40,7 @@ export const TRACK_LIST: TrackMeta[] = [
     subtitle: 'Midnight Suspension Bridge & Neon Bay',
     themeColor: '#ec4899',
     difficulty: 'HIGH SPEED',
+    thumbnailUrl: '/src/assets/images/map_thumb_tokyo_1795609184983.jpg',
   },
   {
     id: 'alps',
@@ -43,6 +49,7 @@ export const TRACK_LIST: TrackMeta[] = [
     subtitle: 'Alpine Switchbacks & Rock Tunnel',
     themeColor: '#f59e0b',
     difficulty: 'TECHNICAL',
+    thumbnailUrl: '/src/assets/images/map_thumb_alps_1795609181137.jpg',
   },
 ];
 

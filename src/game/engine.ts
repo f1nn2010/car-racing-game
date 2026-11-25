@@ -127,6 +127,7 @@ export class RaceEngine {
   // Unified input state
   private keysHeld = new Set<string>();
   private analogSteer: number | null = null;
+  private smoothedDigitalSteer = 0;
   private analogSteerVisual = 0;
   private touchState = {
     left: false,
@@ -498,6 +499,7 @@ export class RaceEngine {
   public clearInputs(): void {
     this.keysHeld.clear();
     this.analogSteer = null;
+    this.smoothedDigitalSteer = 0;
     this.analogSteerVisual = 0;
     this.touchState.left = false;
     this.touchState.right = false;
@@ -598,17 +600,26 @@ export class RaceEngine {
 
   private snapTitleCamera(): void {
     const player = this.getPlayerCar();
-    const dist = 7.2;
-    const angle = player.heading + this.titleOrbitAngle;
+    const dist = 6.9;
+    // Frame hero car from dramatic rear-right 3/4 so the suspension bridge / alpine peaks / lighthouse shine right behind it!
+    const angle = player.heading + Math.PI - 0.56;
     this.camPos.set(
       player.x + Math.sin(angle) * dist,
       player.y + 2.35,
       player.z + Math.cos(angle) * dist
     );
-    this.camLook.set(player.x - 0.6, player.y + 0.85, player.z + 1.2);
+    const fwdX = Math.sin(player.heading);
+    const fwdZ = Math.cos(player.heading);
+    const rightX = -Math.cos(player.heading);
+    const rightZ = Math.sin(player.heading);
+    this.camLook.set(
+      player.x + fwdX * 4.5 - rightX * 1.45,
+      player.y + 1.2,
+      player.z + fwdZ * 4.5 - rightZ * 1.45
+    );
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(this.camLook);
-    this.camera.fov = 52;
+    this.camera.fov = 54;
     this.camera.updateProjectionMatrix();
     this.camInitialized = true;
   }
@@ -630,7 +641,7 @@ export class RaceEngine {
     this.camInitialized = true;
   }
 
-  private samplePlayerInput(): InputState {
+  private samplePlayerInput(dt: number): InputState {
     const k = this.keysHeld;
     const up = k.has('KeyW') || k.has('ArrowUp') || this.touchState.gas;
     const down = k.has('KeyS') || k.has('ArrowDown') || this.touchState.brake;
@@ -647,9 +658,19 @@ export class RaceEngine {
     const throttle = up ? 1 : this.autoGas && !down ? 1 : 0;
     const brake = down ? 1 : 0;
 
-    let steer = (right ? 1 : 0) - (left ? 1 : 0);
+    // Smooth progressive digital steering ramp (snappy return to center, surgical high-speed taps!)
+    const rawDigital = (right ? 1 : 0) - (left ? 1 : 0);
+    const rate = rawDigital === 0 ? 15.0 : 10.5;
+    this.smoothedDigitalSteer +=
+      (rawDigital - this.smoothedDigitalSteer) * Math.min(1, dt * rate);
+    if (Math.abs(this.smoothedDigitalSteer) < 0.01 && rawDigital === 0) {
+      this.smoothedDigitalSteer = 0;
+    }
+
+    let steer = this.smoothedDigitalSteer;
     if (this.analogSteer !== null) {
       steer = this.analogSteer;
+      this.smoothedDigitalSteer = steer;
     }
     this.analogSteerVisual = steer;
 
@@ -906,19 +927,23 @@ export class RaceEngine {
     const player = this.getPlayerCar();
 
     if (this.phase === 'title') {
-      this.titleOrbitAngle += dt * 0.22;
+      // Gentle cinematic hero sway framing supercar + signature map landmarks ahead!
+      this.titleOrbitAngle += dt * 0.42;
       const dist = 6.9;
-      const orbitA = player.heading + this.titleOrbitAngle + this.pointerParallaxX * 0.28;
+      const sway = Math.sin(this.titleOrbitAngle) * 0.24;
+      const orbitA = player.heading + Math.PI - 0.56 + sway + this.pointerParallaxX * 0.18;
       const desiredX = player.x + Math.sin(orbitA) * dist;
-      const desiredY = player.y + 2.25 + this.pointerParallaxY * 0.55;
+      const desiredY = player.y + 2.35 + this.pointerParallaxY * 0.45;
       const desiredZ = player.z + Math.cos(orbitA) * dist;
 
-      // Keep car framed in center-right so left third holds the sleek garage lockup
-      const rightX = -Math.cos(orbitA);
-      const rightZ = Math.sin(orbitA);
-      const lookX = player.x + rightX * 1.15;
-      const lookY = player.y + 0.82;
-      const lookZ = player.z + rightZ * 1.15;
+      // Offset look target slightly so car sits cleanly on the right while landmarks fill the horizon!
+      const fwdX = Math.sin(player.heading);
+      const fwdZ = Math.cos(player.heading);
+      const rightX = -Math.cos(player.heading);
+      const rightZ = Math.sin(player.heading);
+      const lookX = player.x + fwdX * 4.5 - rightX * 1.45;
+      const lookY = player.y + 1.25;
+      const lookZ = player.z + fwdZ * 4.5 - rightZ * 1.45;
 
       const damp = 1 - Math.exp(-5.0 * dt);
       if (!this.camInitialized) {
@@ -1082,7 +1107,7 @@ export class RaceEngine {
     for (const car of this.cars) {
       const input =
         car.isPlayer && this.phase === 'playing' && !car.finished
-          ? this.samplePlayerInput()
+          ? this.samplePlayerInput(dt)
           : computeAiInput(car, this.cars, this.track, this.raceTime);
 
       stepCarPhysics(
