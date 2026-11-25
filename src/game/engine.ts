@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RaceAudioEngine } from './audio';
 import { CarVisualRig, createCarModel } from './carModel';
+import { CockpitRig, createCockpitModel } from './cockpitModel';
 import {
   PhysicsEvent,
   buildRaceCars,
@@ -94,6 +95,8 @@ export class RaceEngine {
 
   private cars: CarState[] = [];
   private carRigs = new Map<string, CarVisualRig>();
+  private cockpitRig: CockpitRig | null = null;
+  private cockpitLight: THREE.PointLight | null = null;
   private raceTime = 0;
   private countdownTimer = 0; // > 0 during 3-2-1 launch
   private lastCountdownStep = 4;
@@ -153,12 +156,16 @@ export class RaceEngine {
       autostart: boolean;
       autoGasDefault: boolean;
       initialTrack?: TrackId;
+      initialCamera?: CameraMode;
     }
   ) {
     this.container = container;
     this.callbacks = callbacks;
     this.autoGas = initialOpts.autoGasDefault;
     this.trackId = initialOpts.initialTrack ?? 'riviera';
+    if (initialOpts.initialCamera) {
+      this.cameraMode = initialOpts.initialCamera;
+    }
     this.track = createTrack(this.trackId, 720);
 
     // Detect software WebGL strictly from renderer string
@@ -236,7 +243,7 @@ export class RaceEngine {
     });
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
 
-    this.camera = new THREE.PerspectiveCamera(62, width / height, 0.25, 2800);
+    this.camera = new THREE.PerspectiveCamera(62, width / height, 0.06, 2800);
 
     // Hemisphere + Directional sun lights (updated per map theme)
     this.hemiLight = new THREE.HemisphereLight(0x9dd1ff, 0x8d7253, 0.95);
@@ -466,9 +473,10 @@ export class RaceEngine {
   }
 
   public cycleCamera(): void {
-    const order: CameraMode[] = ['chase', 'far', 'hood'];
+    const order: CameraMode[] = ['chase', 'cockpit', 'hood', 'far'];
     const idx = order.indexOf(this.cameraMode);
     this.cameraMode = order[(idx + 1) % order.length];
+    this.syncCarVisuals(0);
     this.emitHud();
   }
 
@@ -582,6 +590,13 @@ export class RaceEngine {
       rivals
     );
 
+    if (this.cockpitRig) {
+      this.scene.remove(this.cockpitRig.root);
+      this.cockpitRig.dispose();
+      this.cockpitRig = null;
+      this.cockpitLight = null;
+    }
+
     for (const car of this.cars) {
       const livery = car.isPlayer
         ? getLivery(this.playerLiveryId)
@@ -590,6 +605,17 @@ export class RaceEngine {
       const rig = createCarModel(car.modelId, livery, this.textures);
       this.scene.add(rig.root);
       this.carRigs.set(car.id, rig);
+
+      if (car.isPlayer) {
+        const cockpit = createCockpitModel(car.modelId, livery, this.textures);
+        const cabinLight = new THREE.PointLight(0xeef6ff, 1.35, 3.2, 1.6);
+        cabinLight.position.set(-0.18, 1.34, 0.32);
+        cockpit.cabin.add(cabinLight);
+        cockpit.root.visible = false;
+        this.scene.add(cockpit.root);
+        this.cockpitRig = cockpit;
+        this.cockpitLight = cabinLight;
+      }
     }
     this.syncCarVisuals(0);
   }
@@ -625,6 +651,12 @@ export class RaceEngine {
   }
 
   private snapGameplayCamera(): void {
+    this.syncCarVisuals(0);
+    if (this.cameraMode === 'cockpit' && this.cockpitRig) {
+      this.updateCamera(0.016);
+      this.camInitialized = true;
+      return;
+    }
     const player = this.getPlayerCar();
     const backX = -Math.sin(player.heading);
     const backZ = -Math.cos(player.heading);
@@ -783,6 +815,9 @@ export class RaceEngine {
       this.skidEmitTimer = 0.042;
     }
 
+    const inCockpit = this.phase !== 'title' && this.cameraMode === 'cockpit';
+    const standings = inCockpit ? computeStandings(this.cars) : null;
+
     for (const car of this.cars) {
       const rig = this.carRigs.get(car.id);
       if (!rig) continue;
@@ -792,6 +827,44 @@ export class RaceEngine {
 
       rig.chassis.rotation.z = car.bodyRoll;
       rig.chassis.rotation.x = car.bodyPitch;
+
+      // In cockpit view, hide player exterior cabin hull & reveal ultra-detailed working 3D interior!
+      rig.root.visible = !(car.isPlayer && inCockpit);
+
+      if (car.isPlayer && this.cockpitRig) {
+        this.cockpitRig.root.visible = inCockpit;
+        if (this.cockpitLight) {
+          this.cockpitLight.intensity = this.trackId === 'tokyo' ? 1.85 : 1.15;
+        }
+        if (inCockpit) {
+          this.cockpitRig.root.position.set(car.x, car.y + car.airY, car.z);
+          this.cockpitRig.root.rotation.set(0, car.heading + car.driftAngle, 0);
+          this.cockpitRig.cabin.rotation.z = car.bodyRoll * 0.72;
+          this.cockpitRig.cabin.rotation.x = car.bodyPitch * 0.65;
+
+          const spec = getCarSpec(car.modelId);
+          const posIdx = standings ? standings.findIndex((c) => c.id === car.id) : 0;
+          this.cockpitRig.update(
+            car,
+            {
+              speedKmh: Math.abs(car.speed) * spec.speedDisplayScale,
+              gear: car.gear,
+              rpm: car.rpm,
+              nitro: car.nitro,
+              isBoosting: car.isBoosting,
+              isDrifting: car.isDrifting,
+              braking: car.braking,
+              steerAngle: car.steerAngle,
+              position: posIdx >= 0 ? posIdx + 1 : 1,
+              lap: car.lap,
+              totalLaps: TOTAL_LAPS,
+              lateralG: -car.steerAngle * Math.min(1.4, Math.abs(car.speed) / 42),
+            },
+            dt
+          );
+          this.cockpitRig.root.updateMatrixWorld(true);
+        }
+      }
 
       // Steer front wheels & spin all 4 wheels synced to speed
       for (const pivot of rig.frontWheelPivots) {
@@ -969,15 +1042,68 @@ export class RaceEngine {
     const speedFrac = Math.min(1, Math.abs(player.speed) / 80);
 
     const isPortrait = this.camera.aspect < 0.85;
-    let desiredDist = isPortrait ? 9.8 : 7.6;
-    let desiredHeight = isPortrait ? 4.15 : 3.15;
+
+    // FIRST-PERSON INSIDE-CAR COCKPIT CAMERA (World-locked to driver's seat!)
+    if (this.cameraMode === 'cockpit' && this.cockpitRig) {
+      this.cockpitRig.root.updateMatrixWorld(true);
+
+      // Subtle authentic driver head G-force lean & micro road feel
+      const speedVibY =
+        player.speed > 14 && player.airY <= 0.05
+          ? Math.sin(performance.now() * 0.036) * Math.min(0.008, player.speed * 0.0001)
+          : 0;
+      const headSwayX = -player.steerAngle * 0.045;
+      const headDiveZ = player.braking ? 0.035 : player.isBoosting ? -0.04 : 0;
+
+      // Frame full steering wheel, OLED gauge cluster & panoramic windshield cleanly on both desktop and portrait mobile
+      _vec3A.copy(this.cockpitRig.eyeLocalPos);
+      _vec3A.x += headSwayX;
+      _vec3A.y += speedVibY + (isPortrait ? 0.02 : 0.01);
+      _vec3A.z += headDiveZ + (isPortrait ? -0.10 : -0.02);
+      this.cockpitRig.cabin.localToWorld(_vec3A);
+
+      // Look slightly down into the road horizon so full wheel & gauges sit cleanly in the lower third
+      _vec3B.copy(this.cockpitRig.lookLocalPos);
+      _vec3B.x += player.steerAngle * 2.1 - player.driftAngle * 3.8;
+      _vec3B.y += isPortrait ? -1.45 : -0.85;
+      this.cockpitRig.cabin.localToWorld(_vec3B);
+
+      this.shakeTrauma = Math.max(0, this.shakeTrauma - dt * 2.3);
+      const shake = this.shakeTrauma * this.shakeTrauma;
+      const shakeX = (Math.random() - 0.5) * shake * 0.14;
+      const shakeY = (Math.random() - 0.5) * shake * 0.11;
+
+      this.camPos.copy(_vec3A);
+      this.camLook.copy(_vec3B);
+      this.camera.position.set(_vec3A.x + shakeX, _vec3A.y + shakeY, _vec3A.z);
+      this.camera.lookAt(_vec3B);
+
+      const targetRoll = -player.bodyRoll * 0.45 - player.driftAngle * 0.05;
+      this.camRoll += (targetRoll - this.camRoll) * (1 - Math.exp(-9.0 * dt));
+      this.camera.rotateZ(this.camRoll);
+
+      const cockpitBaseFov = isPortrait ? 80 : 66;
+      const targetFov =
+        cockpitBaseFov + speedFrac * 6.5 + (player.isBoosting ? 7.5 : 0);
+      if (Math.abs(this.camera.fov - targetFov) > 0.05) {
+        this.camera.fov += (targetFov - this.camera.fov) * (1 - Math.exp(-8 * dt));
+        this.camera.updateProjectionMatrix();
+      }
+
+      this.sunLight.position.set(player.x - 45, player.y + 68, player.z + 55);
+      this.sunLight.target.position.set(player.x, player.y, player.z);
+      return;
+    }
+
+    let desiredDist = isPortrait ? 10.4 : 7.6;
+    let desiredHeight = isPortrait ? 4.35 : 3.15;
     let lookAhead = 14.0;
     let posLambda = 9.5;
     let baseFov = isPortrait ? 65 : 62;
 
     if (this.cameraMode === 'far') {
-      desiredDist = isPortrait ? 12.6 : 10.6;
-      desiredHeight = isPortrait ? 5.4 : 4.55;
+      desiredDist = isPortrait ? 13.0 : 10.6;
+      desiredHeight = isPortrait ? 5.5 : 4.55;
       lookAhead = 17.0;
       posLambda = 7.5;
       baseFov = 64;
@@ -1005,7 +1131,7 @@ export class RaceEngine {
     );
     _vec3B.set(
       player.x + fwdX * lookAhead,
-      carTotalY + (this.cameraMode === 'hood' ? 1.15 : isPortrait ? 0.65 : 1.3),
+      carTotalY + (this.cameraMode === 'hood' ? 1.15 : isPortrait ? 0.35 : 1.3),
       player.z + fwdZ * lookAhead
     );
 
@@ -1122,7 +1248,7 @@ export class RaceEngine {
       );
     }
 
-    resolveCarCollisions(this.cars, this.physicsEvents);
+    resolveCarCollisions(this.cars, this.physicsEvents, this.track);
     if (canDrive && this.phase === 'playing') {
       detectOvertakeRewards(this.cars, this.raceTime, this.physicsEvents);
     }
@@ -1430,6 +1556,11 @@ export class RaceEngine {
 
     this.carRigs.forEach((rig) => rig.dispose());
     this.carRigs.clear();
+    if (this.cockpitRig) {
+      this.cockpitRig.dispose();
+      this.cockpitRig = null;
+      this.cockpitLight = null;
+    }
     this.world?.dispose();
     this.textures.dispose();
     this.audio.dispose();

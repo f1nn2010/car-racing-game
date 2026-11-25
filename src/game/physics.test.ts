@@ -11,7 +11,13 @@ import {
   stepCarPhysics,
   updateCheckpointsAndLaps,
 } from './physics';
-import { BARRIER_OFFSET, NUM_CHECKPOINTS, TOTAL_LAPS, createTrack } from './track';
+import {
+  BARRIER_OFFSET,
+  NUM_CHECKPOINTS,
+  TOTAL_LAPS,
+  WALL_COLLISION_OFFSET,
+  createTrack,
+} from './track';
 import { buildRivalLineup, getCarSpec } from './types';
 
 test('iconic car lineup pairs player car with 3 distinct other iconic models', () => {
@@ -140,7 +146,6 @@ test('overtaking rivals awards overtake skill score and nitro bonus', () => {
   const player = cars.find((c) => c.isPlayer)!;
   const events: PhysicsEvent[] = [];
 
-  // Player starts P4 -> advance progress ahead of rivals at race speed -> rank improves to P1
   player.lastPassedRank = 4;
   player.totalProgress = 500;
   player.speed = 58;
@@ -152,8 +157,8 @@ test('overtaking rivals awards overtake skill score and nitro bonus', () => {
   assert.ok(player.nitro > nitroBefore);
 });
 
-test('guardrail clamping keeps car inside circuit corridor and car-to-car collisions separate overlapping vehicles', () => {
-  const track = createTrack('riviera', 420);
+test('guardrail clamping keeps full car width inside side walls and car-to-car collisions stay inside barriers', () => {
+  const track = createTrack('riviera', 720);
   const rivals = buildRivalLineup('chiron');
   const cars = buildRaceCars(track, 'grand-prix', 'chiron', 'french-blue', rivals);
   const events: PhysicsEvent[] = [];
@@ -173,39 +178,68 @@ test('guardrail clamping keeps car inside circuit corridor and car-to-car collis
     true,
     events
   );
-  assert.ok(Math.abs(player.lateralOffset) <= BARRIER_OFFSET + 0.05);
+  // Car center must be strictly inside WALL_COLLISION_OFFSET so fenders/wheels never pass through BARRIER_OFFSET!
+  assert.ok(
+    Math.abs(player.lateralOffset) <= WALL_COLLISION_OFFSET + 0.05,
+    `Expected |lateralOffset| <= ${WALL_COLLISION_OFFSET}, got ${player.lateralOffset}`
+  );
+  assert.ok(WALL_COLLISION_OFFSET <= BARRIER_OFFSET - 1.3);
 
-  // Overlap two cars and verify collision separates them
+  // Overlap two cars right beside the wall and verify collision separation also stays strictly inside the wall!
   const a = cars[0];
   const b = cars[1];
-  b.x = a.x + 1.0;
-  b.z = a.z;
+  const sa = track.samples[a.trackSampleIdx];
+  a.x = sa.x + sa.rx * (WALL_COLLISION_OFFSET - 0.5);
+  a.z = sa.z + sa.rz * (WALL_COLLISION_OFFSET - 0.5);
+  b.x = sa.x + sa.rx * (WALL_COLLISION_OFFSET - 0.05);
+  b.z = sa.z + sa.rz * (WALL_COLLISION_OFFSET - 0.05);
   a.vx = 15;
   b.vx = -15;
-  resolveCarCollisions(cars, events);
-  const newDist = Math.hypot(b.x - a.x, b.z - a.z);
-  assert.ok(newDist > 1.5, `Expected cars pushed apart, got ${newDist}`);
+  resolveCarCollisions(cars, events, track);
+  assert.ok(
+    Math.abs(b.lateralOffset) <= WALL_COLLISION_OFFSET + 0.05,
+    `Expected post-collision car inside wall limit, got ${b.lateralOffset}`
+  );
 });
 
-test('checkpoints progress sequentially and complete 3-lap race cleanly without reverse-lap exploits', () => {
-  const track = createTrack('alps', 420);
+test('finish line triggers ONLY upon crossing the exact 3D Start/Finish gantry index and never prematurely', () => {
+  const track = createTrack('alps', 720);
   const cars = buildRaceCars(track, 'time-trial', 'f40', 'corsa', []);
   const player = cars[0];
   const events: PhysicsEvent[] = [];
 
-  player.trackSampleIdx = track.checkpointIndices[0];
+  assert.equal(track.checkpointIndices[0], track.finishLineIndex);
+
+  // Crossing finish line immediately from grid (before passing checkpoints 1..7) must NOT advance lap
+  player.trackSampleIdx = track.finishLineIndex;
   updateCheckpointsAndLaps(player, track, 12.0, events);
   assert.equal(player.lap, 1);
   assert.equal(player.finished, false);
 
   let t = 5;
   for (let lap = 1; lap <= TOTAL_LAPS; lap++) {
-    for (let step = 0; step < NUM_CHECKPOINTS; step++) {
-      const cp = (step + 1) % NUM_CHECKPOINTS;
+    // Pass checkpoints 1..7
+    for (let cp = 1; cp < NUM_CHECKPOINTS; cp++) {
       player.trackSampleIdx = track.checkpointIndices[cp];
+      player.trackS = track.samples[player.trackSampleIdx].s;
       t += 4.2;
       updateCheckpointsAndLaps(player, track, t, events);
     }
+
+    // Position car 10 samples (~30m) BEFORE the visual Start/Finish gantry -> MUST NOT complete lap yet!
+    const preFinishIdx = (track.finishLineIndex - 10 + track.samples.length) % track.samples.length;
+    player.trackSampleIdx = preFinishIdx;
+    player.trackS = track.samples[preFinishIdx].s;
+    t += 1.0;
+    updateCheckpointsAndLaps(player, track, t, events);
+    assert.equal(player.lap, lap, `Should NOT advance lap ${lap} before crossing visual finish gantry`);
+    assert.equal(player.finished, false);
+
+    // Now cross the exact Start/Finish gantry index!
+    player.trackSampleIdx = track.finishLineIndex;
+    player.trackS = track.finishLineS;
+    t += 0.6;
+    updateCheckpointsAndLaps(player, track, t, events);
   }
 
   assert.equal(player.finished, true);
@@ -219,17 +253,42 @@ test('checkpoints progress sequentially and complete 3-lap race cleanly without 
   assert.equal(result.trackName, 'Alpen Pass');
 });
 
-test('AI rival policies produce bounded valid steering and throttle inputs', () => {
-  const track = createTrack('tokyo', 420);
+test('upgraded AI bots race cleanly at high speed around corners without wall-pinballing or stalling', () => {
+  const track = createTrack('riviera', 720);
   const rivals = buildRivalLineup('svj');
   const cars = buildRaceCars(track, 'grand-prix', 'svj', 'verde', rivals);
-  for (const car of cars) {
-    if (car.isPlayer) continue;
-    const ai = computeAiInput(car, cars, track, 5.0);
-    assert.ok(ai.steer >= -1 && ai.steer <= 1);
-    assert.ok(ai.throttle >= 0 && ai.throttle <= 1);
-    assert.ok(ai.brake >= 0 && ai.brake <= 1);
+  const events: PhysicsEvent[] = [];
+
+  // Simulate 25 seconds of high-speed wheel-to-wheel AI racing (500 steps @ 0.05s)
+  let t = 0;
+  for (let step = 0; step < 500; step++) {
+    t += 0.05;
+    for (const car of cars) {
+      const ai = computeAiInput(car, cars, track, t);
+      assert.ok(ai.steer >= -1 && ai.steer <= 1);
+      assert.ok(ai.throttle >= 0 && ai.throttle <= 1);
+      assert.ok(ai.brake >= 0 && ai.brake <= 1);
+      stepCarPhysics(car, ai, track, cars, 0.05, t, true, events);
+    }
+    resolveCarCollisions(cars, events, track);
   }
+
+  // Every bot must cover > 1,350 meters in 25 seconds (> 54 m/s average!) and stay inside guardrails!
+  for (const car of cars) {
+    assert.ok(
+      car.totalProgress > 1350,
+      `Expected fast AI bot ${car.name} to cover >1350m in 25s, got ${car.totalProgress.toFixed(1)}m`
+    );
+    assert.ok(
+      Math.abs(car.lateralOffset) <= WALL_COLLISION_OFFSET + 0.05,
+      `Expected bot ${car.name} inside guardrails, got lat=${car.lateralOffset.toFixed(2)}`
+    );
+    assert.equal(car.wrongWay, false, `Bot ${car.name} must never drive wrong way`);
+  }
+
+  const wallHits = events.filter((e) => e.type === 'wall-hit').length;
+  assert.ok(wallHits <= 6, `Expected clean cornering with minimal wall hits (<=6), got ${wallHits}`);
+
   const gr = computeGearAndRpm(65, 80);
   assert.ok(gr.gear >= 4 && gr.gear <= 6);
   assert.ok(gr.rpm > 0.3 && gr.rpm <= 1.0);

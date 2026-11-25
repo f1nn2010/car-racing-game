@@ -2,7 +2,7 @@ export type GamePhase = 'title' | 'playing' | 'paused' | 'gameover';
 
 export type GameMode = 'grand-prix' | 'time-trial';
 
-export type CameraMode = 'chase' | 'far' | 'hood';
+export type CameraMode = 'chase' | 'cockpit' | 'hood' | 'far';
 
 export type AiPolicy = 'apex' | 'blocker' | 'drift';
 
@@ -229,8 +229,8 @@ export function buildRivalLineup(playerModelId: CarModelId): RivalSetup[] {
   );
 
   const policies: AiPolicy[] = ['apex', 'blocker', 'drift'];
-  const paces = [0.945, 0.915, 0.885];
-  const offsets = [-2.0, 1.8, 2.8];
+  const paces = [0.995, 0.968, 0.942];
+  const offsets = [-2.2, 2.0, -0.4];
 
   return rivalOrder.slice(0, 3).map((modelId, idx) => {
     const spec = getCarSpec(modelId);

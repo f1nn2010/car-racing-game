@@ -3,6 +3,9 @@ import { BoostPad, CornerChevron, JumpRamp, TrackId, TrackSample } from './types
 export const ROAD_HALF_WIDTH = 9.2; // Generous 18.4m racing surface for thrilling overtakes & drifts
 export const CURB_WIDTH = 1.15;
 export const BARRIER_OFFSET = ROAD_HALF_WIDTH + CURB_WIDTH + 0.55;
+// Effective center-point wall limit subtracting supercar half-width + drift clearance so body & tires NEVER clip through guardrails!
+export const WALL_COLLISION_OFFSET = BARRIER_OFFSET - 1.52;
+export const FINISH_LINE_FRAC = 0.072;
 export const NUM_CHECKPOINTS = 8;
 export const TOTAL_LAPS = 3;
 
@@ -90,6 +93,8 @@ export interface TrackData {
   id: TrackId;
   samples: TrackSample[];
   totalLength: number;
+  finishLineIndex: number;
+  finishLineS: number;
   boostPads: BoostPad[];
   jumpRamps: JumpRamp[];
   cornerChevrons: CornerChevron[];
@@ -321,15 +326,22 @@ export function createTrack(trackId: TrackId = 'riviera', sampleCount = 720): Tr
     }
   }
 
+  // Align checkpointIndices[0] to the EXACT 3D Start/Finish checkered line under the gantry!
+  const finishLineIndex = Math.floor(FINISH_LINE_FRAC * sampleCount) % sampleCount;
+  const finishLineS = samples[finishLineIndex].s;
   const checkpointIndices: number[] = [];
   for (let c = 0; c < NUM_CHECKPOINTS; c++) {
-    checkpointIndices.push(Math.floor((c / NUM_CHECKPOINTS) * sampleCount));
+    checkpointIndices.push(
+      (finishLineIndex + Math.floor((c / NUM_CHECKPOINTS) * sampleCount)) % sampleCount
+    );
   }
 
   return {
     id: trackId,
     samples,
     totalLength,
+    finishLineIndex,
+    finishLineS,
     boostPads,
     jumpRamps,
     cornerChevrons,
@@ -491,7 +503,8 @@ export function getStartGridTransform(
   track: TrackData,
   slotIndex: number
 ): { x: number; y: number; z: number; heading: number; sampleIndex: number } {
-  const startS = track.totalLength * 0.056 - slotIndex * 8.4;
+  // Line up cleanly behind the visual Start/Finish checkered line (slot 0 = 18m behind gantry)
+  const startS = track.finishLineS - 18 - slotIndex * 8.4;
   const wrappedS = ((startS % track.totalLength) + track.totalLength) % track.totalLength;
   const smp = getSampleAtDistance(track, wrappedS);
   const lateral = slotIndex % 2 === 0 ? -2.7 : 2.7;

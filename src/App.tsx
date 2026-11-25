@@ -108,6 +108,11 @@ export default function App() {
     if (initialTrack !== 'riviera') {
       setSelectedTrack(initialTrack);
     }
+    const camParam = params.get('cam');
+    const initialCamera =
+      camParam === 'cockpit' || camParam === 'hood' || camParam === 'far' || camParam === 'chase'
+        ? camParam
+        : undefined;
     const isMobile = detectTouchOrMobileViewport();
 
     const engine = new RaceEngine(
@@ -121,6 +126,7 @@ export default function App() {
         autostart,
         autoGasDefault: isMobile,
         initialTrack,
+        initialCamera,
       }
     );
 

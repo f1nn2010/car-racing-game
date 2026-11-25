@@ -1,9 +1,9 @@
 import {
-  BARRIER_OFFSET,
   NUM_CHECKPOINTS,
   ROAD_HALF_WIDTH,
   TOTAL_LAPS,
   TrackData,
+  WALL_COLLISION_OFFSET,
   getSampleAtDistance,
   getStartGridTransform,
   projectPointToTrack,
@@ -107,7 +107,10 @@ export function createInitialCarState(
     lateralOffset: proj.lateralOffset,
     lap: 1,
     nextCheckpoint: 1,
-    totalProgress: proj.s - track.totalLength * 0.08,
+    totalProgress: (() => {
+      const relS = ((proj.s - track.finishLineS) % track.totalLength + track.totalLength) % track.totalLength;
+      return relS > track.totalLength * 0.75 ? relS - track.totalLength : relS;
+    })(),
     lapStartTime: 0,
     bestLapTime: null,
     lastLapTime: null,
@@ -198,66 +201,142 @@ export function computeAiInput(
   track: TrackData,
   raceTime: number
 ): InputState {
+  const spec = getCarSpec(car.modelId);
   const policy = car.policy ?? 'apex';
-  const lookAheadDist = policy === 'drift' ? 24 : policy === 'blocker' ? 28 : 30;
-  const targetSample = getSampleAtDistance(track, car.trackS + lookAheadDist);
-  const farSample = getSampleAtDistance(track, car.trackS + 48);
+  const speed = Math.max(15, car.speed);
+  const maxSafeLat = WALL_COLLISION_OFFSET - 2.15; // Generous margin so bots hug curbs cleanly without touching guardrails!
 
-  let targetOffset = car.preferredOffset;
+  // Speed-adaptive multi-point lookahead (short enough to never chord-cut hairpins into inner walls!)
+  const steerLookDist = Math.max(12, Math.min(30, 11 + speed * 0.23));
+  const nearSample = getSampleAtDistance(track, car.trackS + steerLookDist * 0.65);
+  const targetSample = getSampleAtDistance(track, car.trackS + steerLookDist);
 
-  if (policy === 'apex') {
-    const curve = farSample.curvature * 180;
-    targetOffset = Math.max(-5.2, Math.min(5.2, curve * 2.2));
-  } else if (policy === 'blocker') {
-    const player = allCars.find((c) => c.isPlayer);
-    if (player) {
-      const ds = (car.trackS - player.trackS + track.totalLength) % track.totalLength;
-      if (ds > 3 && ds < 28) {
-        targetOffset = Math.max(-5.5, Math.min(5.5, player.lateralOffset * 0.85));
-      } else {
-        targetOffset = Math.sin(raceTime * 0.45) * 2.4;
+  // Scan curvature profile ahead up to 115m for early braking & out-in-out apex setup
+  const probeDists = [16, 32, 52, 78, 108];
+  let maxAbsCurve = 0;
+  let weightedCurve = 0;
+  let weightSum = 0;
+  for (let i = 0; i < probeDists.length; i++) {
+    const ps = getSampleAtDistance(track, car.trackS + probeDists[i]);
+    const ac = Math.abs(ps.curvature);
+    if (ac > maxAbsCurve) maxAbsCurve = ac;
+    const w = i === 1 ? 1.4 : i === 2 ? 1.15 : 0.7;
+    weightedCurve += ps.curvature * w;
+    weightSum += w;
+  }
+  const avgAheadCurve = weightedCurve / weightSum;
+  const nearCurve = nearSample.curvature;
+  const farSample = getSampleAtDistance(track, car.trackS + Math.min(90, 32 + speed * 0.58));
+
+  // True Out-In-Out Racing Line:
+  // curvature > 0 => right turn (+rx is inside apex); curvature < 0 => left turn (-rx is inside apex)
+  let targetOffset = car.preferredOffset * 0.4;
+  if (Math.abs(nearCurve) > 0.0042) {
+    // Inside the corner: hug the inside curb cleanly without grazing the inner guardrail!
+    const apexDepth = Math.min(4.6, Math.abs(nearCurve) * 420 + 1.5);
+    targetOffset = Math.sign(nearCurve) * (policy === 'drift' ? apexDepth * 0.8 : apexDepth);
+  } else if (Math.abs(farSample.curvature) > 0.007) {
+    // Approaching a bend: open up toward the outside entry line!
+    targetOffset = -Math.sign(farSample.curvature) * Math.min(4.2, Math.abs(farSample.curvature) * 280);
+  } else {
+    // Straightaway: actively aim for nearby Boost Pads!
+    let bestPadDist = 64;
+    for (const pad of track.boostPads) {
+      const ds = (pad.s - car.trackS + track.totalLength) % track.totalLength;
+      if (ds > 8 && ds < bestPadDist && Math.abs(pad.lateralOffset - car.lateralOffset) < 6.0) {
+        bestPadDist = ds;
+        targetOffset = Math.max(-maxSafeLat, Math.min(maxSafeLat, pad.lateralOffset));
       }
     }
-  } else if (policy === 'drift') {
-    const curve = targetSample.curvature * 160;
-    targetOffset = Math.max(-5.8, Math.min(5.8, -curve * 1.3 + Math.sin(raceTime * 0.8) * 1.6));
-  }
 
-  for (const other of allCars) {
-    if (other.id === car.id) continue;
-    const dx = other.x - car.x;
-    const dz = other.z - car.z;
-    if (dx * dx + dz * dz < 34) {
-      const push = other.lateralOffset > car.lateralOffset ? -2.2 : 2.2;
-      targetOffset = Math.max(-6.2, Math.min(6.2, targetOffset + push));
+    // Defensive blocker protects inside line cleanly when player closes in from behind
+    if (policy === 'blocker') {
+      const player = allCars.find((c) => c.isPlayer);
+      if (player) {
+        const dsBehind = (car.trackS - player.trackS + track.totalLength) % track.totalLength;
+        if (dsBehind > 4 && dsBehind < 26) {
+          targetOffset = Math.max(-maxSafeLat + 1.0, Math.min(maxSafeLat - 1.0, player.lateralOffset * 0.88));
+        }
+      }
     }
   }
 
+  // Proactive clean overtaking & wheel-to-wheel spacing
+  for (const other of allCars) {
+    if (other.id === car.id) continue;
+    const dsAhead = (other.trackS - car.trackS + track.totalLength) % track.totalLength;
+    const latDiff = other.lateralOffset - car.lateralOffset;
+
+    if (dsAhead > 2.2 && dsAhead < 30 && Math.abs(other.lateralOffset - targetOffset) < 3.4) {
+      const spaceRight = maxSafeLat - other.lateralOffset;
+      const spaceLeft = maxSafeLat + other.lateralOffset;
+      const passDir = spaceRight >= spaceLeft ? 1 : -1;
+      targetOffset = other.lateralOffset + passDir * 3.6;
+    } else if ((dsAhead <= 2.2 || dsAhead > track.totalLength - 6.5) && Math.abs(latDiff) < 3.4) {
+      const nudge = latDiff >= 0 ? -2.2 : 2.2;
+      targetOffset += nudge;
+    }
+  }
+
+  targetOffset = Math.max(-maxSafeLat, Math.min(maxSafeLat, targetOffset));
+
+  // Pure pursuit steering with CORRECT sign (+steer turns right / decreases heading!)
   const tx = targetSample.x + targetSample.rx * targetOffset;
   const tz = targetSample.z + targetSample.rz * targetOffset;
   const desiredHeading = Math.atan2(tx - car.x, tz - car.z);
   const headingErr = normalizeAngle(desiredHeading - car.heading);
 
-  const steer = Math.max(-1, Math.min(1, headingErr * 1.85));
-  const absCurve = Math.abs(farSample.curvature);
+  // Curvature feedforward + firm wall-avoidance repulsion so bots NEVER grind guardrails
+  const curvFeed = (targetSample.curvature * 0.65 + avgAheadCurve * 0.35) * 16.0;
+  let wallRepel = 0;
+  if (Math.abs(car.lateralOffset) > maxSafeLat - 0.8) {
+    wallRepel = -Math.sign(car.lateralOffset) * (Math.abs(car.lateralOffset) - (maxSafeLat - 0.8)) * 0.85;
+  }
+
+  const rawSteer = -headingErr * 2.75 + curvFeed + wallRepel;
+  const steer = Math.max(-1, Math.min(1, rawSteer));
+
+  // Compute safe corner target speed from upcoming peak curvature & car grip
+  const maxTurnRadPerSec = (policy === 'drift' ? 1.52 : 1.36) * spec.handling;
+  const cornerTargetSpeed =
+    maxAbsCurve > 0.0055 ? Math.max(36, maxTurnRadPerSec / Math.max(0.0055, maxAbsCurve)) : 140;
 
   let throttle = 1.0;
   let brake = 0;
   let drift = false;
   let boost = false;
 
-  if (policy === 'apex' && absCurve > 0.015 && car.speed > 48) {
-    throttle = 0.55;
+  // Smart braking before tight hairpins
+  if (car.speed > cornerTargetSpeed + 3) {
+    const excess = Math.min(1, (car.speed - cornerTargetSpeed) / 24);
+    throttle = Math.max(0.15, 0.82 - excess * 0.7);
+    brake = Math.min(0.75, 0.22 + excess * 0.55);
+  } else if (Math.abs(headingErr) > 0.32 && car.speed > 42) {
+    throttle = 0.58;
     brake = 0.26;
-  } else if (policy === 'blocker' && absCurve > 0.019 && car.speed > 55) {
-    throttle = 0.48;
-    brake = 0.38;
-  } else if (policy === 'drift' && absCurve > 0.012 && car.speed > 40) {
-    drift = Math.abs(steer) > 0.35;
-    throttle = 0.9;
   }
 
-  if (absCurve < 0.006 && car.nitro > 45 && Math.abs(headingErr) < 0.18 && raceTime > 4) {
+  // Controlled high-speed drifting through sharp sweepers to earn mini-turbo & nitro!
+  const driftThresh = policy === 'drift' ? 0.0095 : 0.013;
+  if (
+    Math.abs(nearCurve) > driftThresh &&
+    car.speed > 42 &&
+    Math.abs(steer) > 0.34 &&
+    brake < 0.25 &&
+    Math.abs(car.lateralOffset) < maxSafeLat - 0.8
+  ) {
+    drift = true;
+    throttle = Math.max(throttle, 0.9);
+  }
+
+  // Aggressive smart nitro deployment on straights and corner exits!
+  if (
+    maxAbsCurve < 0.0085 &&
+    Math.abs(headingErr) < 0.16 &&
+    car.nitro > 24 &&
+    raceTime > 2.2 &&
+    brake < 0.05
+  ) {
     boost = true;
   }
 
@@ -295,8 +374,13 @@ export function stepCarPhysics(
     const player = allCars.find((c) => c.isPlayer);
     if (player && !player.finished) {
       const gap = car.totalProgress - player.totalProgress;
-      if (gap > 62) paceMult *= 0.91;
-      else if (gap < -62) paceMult *= 1.07;
+      if (gap > 85) {
+        const ease = Math.min(0.08, ((gap - 85) / 140) * 0.08);
+        paceMult *= 1.0 - ease;
+      } else if (gap < -35) {
+        const push = Math.min(0.11, ((-gap - 35) / 110) * 0.11);
+        paceMult *= 1.0 + push;
+      }
     }
   }
 
@@ -485,17 +569,18 @@ export function stepCarPhysics(
   car.lateralOffset = proj.lateralOffset;
   car.y = proj.y;
 
-  // Forgiving guardrail glide (redirects cleanly parallel to road without stalling!)
-  if (Math.abs(car.lateralOffset) > BARRIER_OFFSET) {
+  // Tight physical guardrail clamp (accounts for full car width + drift angle so tires/fenders NEVER pass through wall!)
+  if (Math.abs(car.lateralOffset) > WALL_COLLISION_OFFSET) {
     const sign = Math.sign(car.lateralOffset);
-    const excess = Math.abs(car.lateralOffset) - BARRIER_OFFSET;
+    const excess = Math.abs(car.lateralOffset) - WALL_COLLISION_OFFSET;
     car.x -= proj.sample.rx * sign * excess;
     car.z -= proj.sample.rz * sign * excess;
-    car.lateralOffset = sign * BARRIER_OFFSET;
+    car.lateralOffset = sign * WALL_COLLISION_OFFSET;
 
     const trackHeading = Math.atan2(proj.sample.tx, proj.sample.tz);
     const angleDiff = normalizeAngle(trackHeading - car.heading);
-    car.heading = normalizeAngle(car.heading + angleDiff * Math.min(1, 0.55 + dt * 7));
+    car.heading = normalizeAngle(car.heading + angleDiff * Math.min(1, 0.65 + dt * 8));
+    car.driftAngle *= 0.62; // Pull tail cleanly back inside guardrail!
 
     const impactStrength = Math.min(1, (Math.abs(car.speed) / 58) * (0.22 + Math.abs(angleDiff)));
     const scrapeDrag = Math.exp(-(0.35 + Math.abs(angleDiff) * 1.55) * dt);
@@ -645,10 +730,13 @@ export function updateCheckpointsAndLaps(
   }
 
   const completedLaps = car.finished ? TOTAL_LAPS : car.lap - 1;
+  const relS =
+    (((car.trackS - track.finishLineS) % track.totalLength) + track.totalLength) %
+    track.totalLength;
   const adjustedS =
-    completedLaps === 0 && car.nextCheckpoint === 1 && car.trackS > track.totalLength * 0.75
-      ? car.trackS - track.totalLength
-      : car.trackS;
+    car.nextCheckpoint === 1 && relS > track.totalLength * 0.75
+      ? relS - track.totalLength
+      : relS;
   car.totalProgress = completedLaps * track.totalLength + adjustedS;
 }
 
@@ -678,7 +766,11 @@ export function detectOvertakeRewards(
   });
 }
 
-export function resolveCarCollisions(cars: CarState[], events: PhysicsEvent[]): void {
+export function resolveCarCollisions(
+  cars: CarState[],
+  events: PhysicsEvent[],
+  track?: TrackData
+): void {
   const minDist = 2.65;
   for (let i = 0; i < cars.length; i++) {
     for (let j = i + 1; j < cars.length; j++) {
@@ -726,6 +818,20 @@ export function resolveCarCollisions(cars: CarState[], events: PhysicsEvent[]): 
             });
           }
         }
+      }
+    }
+  }
+
+  // Re-clamp all cars strictly inside guardrails after collision separation so side-by-side contact never pushes a car through the wall
+  if (track) {
+    for (const car of cars) {
+      const proj = projectPointToTrack(track, car.x, car.z, car.trackSampleIdx);
+      if (Math.abs(proj.lateralOffset) > WALL_COLLISION_OFFSET) {
+        const sign = Math.sign(proj.lateralOffset);
+        const excess = Math.abs(proj.lateralOffset) - WALL_COLLISION_OFFSET;
+        car.x -= proj.sample.rx * sign * excess;
+        car.z -= proj.sample.rz * sign * excess;
+        car.lateralOffset = sign * WALL_COLLISION_OFFSET;
       }
     }
   }

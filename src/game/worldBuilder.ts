@@ -1041,7 +1041,7 @@ export function buildWorld(
   // =========================================================================
   // 3. START / FINISH GANTRY ARCH + 3 OVERHEAD SECTOR BRIDGES
   // =========================================================================
-  const startArchSample = getSampleAtDistance(track, track.totalLength * 0.072);
+  const startArchSample = track.samples[track.finishLineIndex];
   const archGroup = new THREE.Group();
   archGroup.position.set(startArchSample.x, startArchSample.y, startArchSample.z);
   archGroup.rotation.y = Math.atan2(startArchSample.tx, startArchSample.tz);
