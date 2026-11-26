@@ -1,4 +1,5 @@
 import React from 'react';
+import { computeMedalTier } from '../game/records';
 import { RaceResult } from '../game/types';
 import { formatRaceTime } from './RaceHud';
 
@@ -101,6 +102,18 @@ interface FinishModalProps {
 }
 
 export const FinishModal: React.FC<FinishModalProps> = ({ result, onRestart, onTitle }) => {
+  const medal = computeMedalTier({
+    mode: result.mode,
+    position: result.position,
+    bestLapSec: result.bestLapTime,
+  });
+  const medalColors: Record<string, { bg: string; text: string; label: string }> = {
+    gold: { bg: '#f5b700', text: '#111824', label: 'GOLD TROPHY' },
+    silver: { bg: '#cbd5e1', text: '#111824', label: 'SILVER MEDAL' },
+    bronze: { bg: '#d97706', text: '#fffdf8', label: 'BRONZE MEDAL' },
+  };
+  const medalBadge = medal !== 'none' ? medalColors[medal] : null;
+
   const headline =
     result.mode === 'time-trial'
       ? 'TIME TRIAL COMPLETE'
@@ -128,12 +141,27 @@ export const FinishModal: React.FC<FinishModalProps> = ({ result, onRestart, onT
         />
         <div className="p-6 flex flex-col gap-5">
           <div>
-            <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#f5c04e]">
-              {result.trackName} · {result.carName}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#f5c04e]">
+                {result.trackName} · {result.carName}
+              </div>
+              {medalBadge && (
+                <span
+                  className="px-2 py-0.5 rounded text-[10px] font-display font-extrabold tracking-wider uppercase"
+                  style={{ backgroundColor: medalBadge.bg, color: medalBadge.text }}
+                >
+                  {medalBadge.label}
+                </span>
+              )}
             </div>
             <h2 className="font-display italic font-extrabold text-4xl tracking-wide text-[#f8f4e8] uppercase mt-0.5">
               {headline}
             </h2>
+            {result.newTrackRecord && (
+              <div className="mt-1 inline-block px-2 py-0.5 rounded bg-[#22c55e]/20 border border-[#4ade80]/50 text-[11px] font-bold tracking-widest uppercase text-[#86efac]">
+                ★ NEW PERSONAL TRACK RECORD
+              </div>
+            )}
           </div>
 
           {/* Key Mastery Stat Tiles */}

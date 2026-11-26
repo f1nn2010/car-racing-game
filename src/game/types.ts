@@ -363,6 +363,7 @@ export interface MinimapDot {
   id: string;
   x: number;
   z: number;
+  heading: number;
   isPlayer: boolean;
   color: string;
 }
@@ -396,6 +397,8 @@ export interface HudSnapshot {
   countdown: number;
   wrongWay: boolean;
   slipstream: boolean;
+  upcomingTurn: 'left' | 'right' | null;
+  upcomingTurnSeverity: number;
   bannerText: string | null;
   skillCallout: string | null;
   cameraMode: CameraMode;
@@ -407,6 +410,7 @@ export interface HudSnapshot {
 
 export interface RaceResult {
   mode: GameMode;
+  trackId: TrackId;
   trackName: string;
   carName: string;
   position: number;
@@ -417,6 +421,7 @@ export interface RaceResult {
   totalDriftPoints: number;
   skillScore: number;
   isPodium: boolean;
+  newTrackRecord?: boolean;
   standings: Array<{
     id: string;
     name: string;

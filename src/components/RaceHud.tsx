@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { computeJoystickSteer } from '../game/controls';
 import { TrackData } from '../game/track';
 import { HudSnapshot } from '../game/types';
 
@@ -45,9 +46,10 @@ export const RaceHud: React.FC<RaceHudProps> = ({
   onTouchInput,
 }) => {
   const [pressedTouch, setPressedTouch] = useState<Record<string, boolean>>({});
-  const [steerMode, setSteerMode] = useState<'arrows' | 'slide'>('arrows');
+  const [steerMode, setSteerMode] = useState<'stick' | 'arrows'>('stick');
   const [padActive, setPadActive] = useState(false);
   const [padSteer, setPadSteer] = useState(0);
+  const [knobOffset, setKnobOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const steerPointerIdRef = useRef<number | null>(null);
 
   // Precompute SVG minimap path from actual closed circuit geometry
@@ -68,47 +70,66 @@ export const RaceHud: React.FC<RaceHudProps> = ({
       const s = track.samples[i];
       pts.push(`${mapX(s.x).toFixed(1)},${mapY(s.z).toFixed(1)}`);
     }
+
+    // Exact Start/Finish gantry bar perpendicular to track direction
+    const fin = track.samples[track.finishLineIndex] ?? track.samples[0];
+    const fx = mapX(fin.x);
+    const fy = mapY(fin.z);
+    const nx = -fin.rx;
+    const ny = -fin.rz;
+    const nLen = Math.hypot(nx, ny) || 1;
+    const tick = 5.2;
+
     return {
       pathD: `M ${pts.join(' L ')} Z`,
       mapX,
       mapY,
+      finishBar: {
+        x1: fx - (nx / nLen) * tick,
+        y1: fy - (ny / nLen) * tick,
+        x2: fx + (nx / nLen) * tick,
+        y2: fy + (ny / nLen) * tick,
+      },
     };
   }, [track]);
 
-  const computeSteerFromPointer = (clientX: number, el: Element): number => {
+  const updateSteerFromPointer = (clientX: number, clientY: number, el: Element) => {
     const rect = el.getBoundingClientRect();
-    const raw = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-    const clamped = Math.max(-1, Math.min(1, raw));
-
-    if (steerMode === 'arrows') {
-      // Seamless Dual-Zone Slide-Across Arrows: crisp immediate response on left/right halves + soft center zone
-      if (Math.abs(clamped) < 0.08) return 0;
-      const mag = Math.min(1, 0.62 + Math.abs(clamped) * 0.55);
-      return Number((Math.sign(clamped) * mag).toFixed(3));
+    if (steerMode === 'stick') {
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.5;
+      const maxR = Math.min(rect.width, rect.height) * 0.36;
+      const vec = computeJoystickSteer(clientX - cx, clientY - cy, maxR);
+      setPadSteer(vec.steer);
+      setKnobOffset({ x: vec.knobX, y: vec.knobY });
+      onAnalogSteer(vec.steer);
+      return;
     }
 
-    // Continuous Analog Slider Mode
-    if (Math.abs(clamped) < 0.06) return 0;
-    const shaped = Math.sign(clamped) * Math.min(1, (Math.abs(clamped) - 0.06) / 0.8);
-    return Number(shaped.toFixed(3));
+    // Dual-zone slide-across arrows fallback
+    const raw = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+    const clamped = Math.max(-1, Math.min(1, raw));
+    const val =
+      Math.abs(clamped) < 0.08
+        ? 0
+        : Number((Math.sign(clamped) * Math.min(1, 0.62 + Math.abs(clamped) * 0.55)).toFixed(3));
+    setPadSteer(val);
+    setKnobOffset({ x: val, y: 0 });
+    onAnalogSteer(val);
   };
 
   const handleSteerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     steerPointerIdRef.current = e.pointerId;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    const val = computeSteerFromPointer(e.clientX, e.currentTarget);
     setPadActive(true);
-    setPadSteer(val);
-    onAnalogSteer(val);
+    updateSteerFromPointer(e.clientX, e.clientY, e.currentTarget);
   };
 
   const handleSteerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (steerPointerIdRef.current !== e.pointerId) return;
     e.preventDefault();
-    const val = computeSteerFromPointer(e.clientX, e.currentTarget);
-    setPadSteer(val);
-    onAnalogSteer(val);
+    updateSteerFromPointer(e.clientX, e.clientY, e.currentTarget);
   };
 
   const releaseSteerPad = (e?: React.PointerEvent<HTMLDivElement>) => {
@@ -118,6 +139,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
     steerPointerIdRef.current = null;
     setPadActive(false);
     setPadSteer(0);
+    setKnobOffset({ x: 0, y: 0 });
     onAnalogSteer(null);
   };
 
@@ -385,16 +407,16 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                 type="button"
                 tabIndex={-1}
                 aria-label={`Steering Mode: ${steerMode}`}
-                title="Switch Steering Style (Arrows / Slide)"
+                title="Switch Steering Style (Joystick / Arrows)"
                 data-testid="toggle-steermode"
                 onClick={(e) => {
                   e.currentTarget.blur();
-                  setSteerMode((m) => (m === 'arrows' ? 'slide' : 'arrows'));
+                  setSteerMode((m) => (m === 'stick' ? 'arrows' : 'stick'));
                 }}
                 className="h-10 sm:h-9 px-2 sm:px-2.5 rounded-lg border border-white/15 text-[#e2e8f0] hover:bg-[#243247] text-[10px] sm:text-[11px] font-bold uppercase tracking-wider cursor-pointer"
                 style={{ backgroundColor: 'rgba(13, 20, 31, 0.86)' }}
               >
-                {steerMode === 'arrows' ? 'Arrows' : 'Slide'}
+                {steerMode === 'stick' ? 'Stick' : 'Arrows'}
               </button>
 
               <button
@@ -500,17 +522,55 @@ export const RaceHud: React.FC<RaceHudProps> = ({
               strokeLinejoin="round"
               opacity="0.88"
             />
-            {hud.minimapDots.map((dot) => (
-              <circle
-                key={dot.id}
-                cx={minimapData.mapX(dot.x)}
-                cy={minimapData.mapY(dot.z)}
-                r={dot.isPlayer ? 5.2 : 3.8}
-                fill={dot.color}
-                stroke={dot.isPlayer ? '#ffffff' : '#0b111b'}
-                strokeWidth={dot.isPlayer ? 2 : 1.2}
-              />
-            ))}
+            {/* Exact Start / Finish Line Marker */}
+            <line
+              x1={minimapData.finishBar.x1}
+              y1={minimapData.finishBar.y1}
+              x2={minimapData.finishBar.x2}
+              y2={minimapData.finishBar.y2}
+              stroke="#ffffff"
+              strokeWidth="3.4"
+              strokeLinecap="butt"
+            />
+            <line
+              x1={minimapData.finishBar.x1}
+              y1={minimapData.finishBar.y1}
+              x2={minimapData.finishBar.x2}
+              y2={minimapData.finishBar.y2}
+              stroke="#ef4444"
+              strokeWidth="1.8"
+              strokeDasharray="2 2"
+            />
+            {hud.minimapDots.map((dot) => {
+              const mx = minimapData.mapX(dot.x);
+              const my = minimapData.mapY(dot.z);
+              if (!dot.isPlayer) {
+                return (
+                  <circle
+                    key={dot.id}
+                    cx={mx}
+                    cy={my}
+                    r={3.8}
+                    fill={dot.color}
+                    stroke="#0b111b"
+                    strokeWidth={1.2}
+                  />
+                );
+              }
+              // Directional player arrow aligned to inverted minimap axes (-X right, -Z down)
+              const deg = (Math.atan2(-Math.sin(dot.heading), Math.cos(dot.heading)) * 180) / Math.PI;
+              return (
+                <g key={dot.id} transform={`translate(${mx.toFixed(1)}, ${my.toFixed(1)}) rotate(${deg.toFixed(1)})`}>
+                  <polygon
+                    points="0,-6.5 5.0,5.2 0,2.6 -5.0,5.2"
+                    fill={dot.color}
+                    stroke="#ffffff"
+                    strokeWidth="1.6"
+                    strokeLinejoin="round"
+                  />
+                </g>
+              );
+            })}
           </svg>
           <span className="text-[9px] font-bold tracking-[0.14em] uppercase text-[#a8b6c9] -mt-0.5">
             {hud.trackName}
@@ -559,13 +619,45 @@ export const RaceHud: React.FC<RaceHudProps> = ({
         </div>
       )}
 
-      {hud.slipstream && !hud.wrongWay && !hud.skillCallout && (
+      {hud.slipstream && !hud.wrongWay && !hud.skillCallout && !hud.upcomingTurn && (
         <div className="fixed inset-x-0 top-[11%] flex justify-center">
           <div
             className="px-3.5 py-0.5 rounded border border-[#38bdf8]/60 font-display italic font-bold text-sm tracking-[0.2em] uppercase text-[#7dd3fc]"
             style={{ backgroundColor: 'rgba(13, 20, 31, 0.72)' }}
           >
             SLIPSTREAM DRAFTING
+          </div>
+        </div>
+      )}
+
+      {/* Rally-Style Upcoming Sharp Corner Pace-Note Warning */}
+      {hud.countdown <= 0 && !hud.wrongWay && !hud.bannerText && hud.upcomingTurn && (
+        <div className="fixed inset-x-0 top-[10%] flex justify-center" data-testid="corner-warning">
+          <div
+            className={`px-3.5 py-1 rounded border-2 flex items-center gap-2 font-display italic font-extrabold text-base sm:text-xl tracking-wider uppercase ${
+              hud.upcomingTurnSeverity > 0.55
+                ? 'border-[#ef4444] text-[#fecaca]'
+                : 'border-[#f59e0b] text-[#fde68a]'
+            }`}
+            style={{ backgroundColor: 'rgba(13, 20, 31, 0.84)' }}
+          >
+            {hud.upcomingTurn === 'left' ? (
+              <>
+                <svg viewBox="0 0 24 24" className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M19 19V9H6" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M11 4L6 9l5 5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>{hud.upcomingTurnSeverity > 0.55 ? 'HAIRPIN LEFT' : 'SHARP LEFT'}</span>
+              </>
+            ) : (
+              <>
+                <span>{hud.upcomingTurnSeverity > 0.55 ? 'HAIRPIN RIGHT' : 'SHARP RIGHT'}</span>
+                <svg viewBox="0 0 24 24" className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M5 19V9h13" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M13 4l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -686,15 +778,78 @@ export const RaceHud: React.FC<RaceHudProps> = ({
       </div>
 
       {/* =====================================================================
-          PRO-GRADE MOBILE TOUCH CONTROLS:
-          Left  = Seamless Dual-Zone Slide-Across Arrows (or Analog Slider)
-          Right = Ergonomic Curved Thumb Arc (Huge Nitro + Drift + Tuck-Away Brake)
+          EFFORTLESS MOBILE TOUCH CONTROLS:
+          Left  = Smooth Circular 360° Thumb Steering Joystick (or Arrow Deck)
+          Right = Ergonomic Easy-Reach Thumb Arc (Big Nitro + Drift + Clean Brake)
          ===================================================================== */}
       {showTouchControls && (
-        <div className="fixed inset-x-0 bottom-0 z-20 px-2.5 pb-3 sm:p-5 flex items-end justify-between pointer-events-none">
-          {/* Left Thumb Zone: Large Unified Touch Steering Deck (Tap OR Slide Across!) */}
+        <div className="fixed inset-x-0 bottom-0 z-20 px-3 pb-3.5 sm:p-5 flex items-end justify-between pointer-events-none">
+          {/* Left Thumb Zone: Tactile Circular Steering Joystick (default) or Dual Arrows */}
           <div className="pointer-events-auto">
-            {steerMode === 'arrows' ? (
+            {steerMode === 'stick' ? (
+              <div
+                role="slider"
+                aria-label="Steering Joystick"
+                aria-valuemin={-100}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(displayedSteer * 100)}
+                data-testid="touch-steer-pad"
+                onPointerDown={handleSteerDown}
+                onPointerMove={handleSteerMove}
+                onPointerUp={releaseSteerPad}
+                onPointerCancel={releaseSteerPad}
+                onLostPointerCapture={releaseSteerPad}
+                className={`relative w-[152px] h-[152px] sm:w-[172px] sm:h-[172px] rounded-full border-2 touch-none cursor-pointer flex items-center justify-center shadow-2xl transition-colors ${
+                  padActive ? 'border-[#38bdf8]' : 'border-white/35'
+                }`}
+                style={{ backgroundColor: 'rgba(13, 20, 31, 0.82)' }}
+              >
+                {/* Inner Guide Ring & Subtle Crosshair */}
+                <div className="absolute inset-4 rounded-full border border-white/15 pointer-events-none" />
+                <div className="absolute inset-x-5 top-1/2 h-px -translate-y-1/2 bg-white/12 pointer-events-none" />
+                <div className="absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-white/10 pointer-events-none" />
+
+                {/* Left / Right Directional Indicators */}
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-6 h-6 pointer-events-none transition-colors ${
+                    displayedSteer < -0.12 ? 'text-[#38bdf8]' : 'text-white/45'
+                  }`}
+                  fill="currentColor"
+                >
+                  <path d="M15.5 5l-7 7 7 7V5z" />
+                </svg>
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 pointer-events-none transition-colors ${
+                    displayedSteer > 0.12 ? 'text-[#38bdf8]' : 'text-white/45'
+                  }`}
+                  fill="currentColor"
+                >
+                  <path d="M8.5 5l7 7-7 7V5z" />
+                </svg>
+
+                {/* Floating Chunky Thumbstick Knob */}
+                <div
+                  className="relative z-10 w-[64px] h-[64px] sm:w-[72px] sm:h-[72px] rounded-full border-[3px] flex items-center justify-center pointer-events-none shadow-xl"
+                  style={{
+                    transform: `translate(${(padActive ? knobOffset.x : displayedSteer) * 40}px, ${
+                      padActive ? knobOffset.y * 26 : 0
+                    }px)`,
+                    backgroundColor: padActive ? '#38bdf8' : '#e2e8f0',
+                    borderColor: padActive ? '#e0f2fe' : '#ffffff',
+                  }}
+                >
+                  <div className="w-8 h-8 rounded-full border-2 border-[#0d1520]/30 flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#0d1520]/70" />
+                  </div>
+                </div>
+
+                <span className="absolute bottom-2.5 inset-x-0 text-center text-[9px] font-bold tracking-[0.18em] uppercase text-[#a8b6c9] pointer-events-none">
+                  STEER
+                </span>
+              </div>
+            ) : (
               <div
                 role="slider"
                 aria-label="Steer Left or Right"
@@ -707,7 +862,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                 onPointerUp={releaseSteerPad}
                 onPointerCancel={releaseSteerPad}
                 onLostPointerCapture={releaseSteerPad}
-                className="grid grid-cols-2 w-[186px] h-[108px] sm:w-[228px] sm:h-[112px] rounded-2xl border-2 border-white/35 overflow-hidden touch-none cursor-pointer shadow-xl"
+                className="grid grid-cols-2 w-[176px] h-[106px] sm:w-[220px] sm:h-[112px] rounded-2xl border-2 border-white/35 overflow-hidden touch-none cursor-pointer shadow-xl"
                 style={{ backgroundColor: 'rgba(13, 20, 31, 0.86)' }}
               >
                 <div
@@ -715,7 +870,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     displayedSteer < -0.1 ? 'bg-[#38bdf8] text-[#09121e]' : 'text-[#f8f4e8]'
                   }`}
                 >
-                  <svg viewBox="0 0 24 24" className="w-12 h-12" fill="currentColor">
+                  <svg viewBox="0 0 24 24" className="w-11 h-11" fill="currentColor">
                     <path d="M15.5 5l-7 7 7 7V5z" />
                   </svg>
                   <span className="text-[11px] font-bold tracking-widest uppercase opacity-90">
@@ -727,7 +882,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     displayedSteer > 0.1 ? 'bg-[#38bdf8] text-[#09121e]' : 'text-[#f8f4e8]'
                   }`}
                 >
-                  <svg viewBox="0 0 24 24" className="w-12 h-12" fill="currentColor">
+                  <svg viewBox="0 0 24 24" className="w-11 h-11" fill="currentColor">
                     <path d="M8.5 5l7 7-7 7V5z" />
                   </svg>
                   <span className="text-[11px] font-bold tracking-widest uppercase opacity-90">
@@ -735,80 +890,27 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                   </span>
                 </div>
               </div>
-            ) : (
-              <div
-                role="slider"
-                aria-label="Slide to Steer"
-                aria-valuemin={-100}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(displayedSteer * 100)}
-                data-testid="touch-steer-pad"
-                onPointerDown={handleSteerDown}
-                onPointerMove={handleSteerMove}
-                onPointerUp={releaseSteerPad}
-                onPointerCancel={releaseSteerPad}
-                onLostPointerCapture={releaseSteerPad}
-                className={`relative w-[186px] h-[108px] sm:w-[228px] sm:h-[112px] rounded-2xl border-2 touch-none cursor-pointer flex items-center justify-between px-4 overflow-hidden transition-colors shadow-xl ${
-                  padActive ? 'border-[#38bdf8]' : 'border-white/35'
-                }`}
-                style={{ backgroundColor: 'rgba(13, 20, 31, 0.86)' }}
-              >
-                <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 h-2.5 rounded-full bg-[#090e17] border border-white/15" />
-                <div className="absolute left-1/2 top-3 bottom-3 w-0.5 -translate-x-1/2 bg-white/15" />
-
-                <svg
-                  viewBox="0 0 24 24"
-                  className={`relative z-10 w-9 h-9 ${
-                    displayedSteer < -0.15 ? 'text-[#38bdf8]' : 'text-white/65'
-                  }`}
-                  fill="currentColor"
-                >
-                  <path d="M15.5 5l-7 7 7 7V5z" />
-                </svg>
-
-                <svg
-                  viewBox="0 0 24 24"
-                  className={`relative z-10 w-9 h-9 ${
-                    displayedSteer > 0.15 ? 'text-[#38bdf8]' : 'text-white/65'
-                  }`}
-                  fill="currentColor"
-                >
-                  <path d="M8.5 5l7 7-7 7V5z" />
-                </svg>
-
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-13 h-13 rounded-xl border-2 flex items-center justify-center pointer-events-none shadow-lg"
-                  style={{
-                    left: `${50 + displayedSteer * 34}%`,
-                    backgroundColor: padActive ? '#38bdf8' : '#f4efe2',
-                    borderColor: padActive ? '#e0f2fe' : '#ffffff',
-                  }}
-                >
-                  <div className="w-2 h-6 rounded-full bg-[#0d1520]/80" />
-                </div>
-
-                <span className="absolute inset-x-0 bottom-1.5 text-center text-[10px] font-bold tracking-[0.16em] uppercase text-[#a8b6c9] pointer-events-none">
-                  SLIDE TO STEER
-                </span>
-              </div>
             )}
           </div>
 
-          {/* Right Thumb Zone: Large Ergonomic Curved Action Arc */}
+          {/* Right Thumb Zone: Clean Ergonomic Action Arc */}
           <div className="flex flex-col items-end gap-2.5 pointer-events-auto">
             {hud.autoGas ? (
               <>
-                {/* Large Brake button tucked cleanly above Drift/Nitro */}
-                <div className="flex items-center gap-2 pr-0.5">
+                {/* Easy-Tap Brake Bar cleanly aligned above Drift + Nitro */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-[#86efac] hud-stroke">
+                    AUTO GAS
+                  </span>
                   <button
                     type="button"
                     aria-label="Brake"
                     data-testid="touch-brake"
                     {...bindTouchControl('brake')}
-                    className={`w-[104px] h-[54px] sm:w-[116px] sm:h-[58px] rounded-xl border-2 font-display italic font-extrabold text-xl tracking-wider touch-none cursor-pointer transition-transform shadow-lg ${
+                    className={`w-[104px] h-[48px] sm:w-[116px] sm:h-[52px] rounded-xl border-2 font-display italic font-extrabold text-xl tracking-wider touch-none cursor-pointer transition-transform shadow-lg ${
                       pressedTouch.brake
                         ? 'bg-[#dc2626] border-[#fca5a5] text-white scale-95'
-                        : 'border-[#ef4444]/75 text-[#fca5a5]'
+                        : 'border-[#ef4444]/80 text-[#fca5a5]'
                     }`}
                     style={
                       pressedTouch.brake ? undefined : { backgroundColor: 'rgba(13, 20, 31, 0.86)' }
@@ -816,19 +918,16 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                   >
                     BRAKE
                   </button>
-                  <span className="text-[10px] font-bold tracking-wider uppercase text-[#86efac] hud-stroke">
-                    AUTO GAS
-                  </span>
                 </div>
 
-                {/* Primary Thumb Row: Extra-Large DRIFT + Massive Liquid-Fill NITRO */}
+                {/* Primary Right-Thumb Buttons: Large DRIFT + Huge Liquid-Fill NITRO */}
                 <div className="flex items-end gap-2">
                   <button
                     type="button"
                     aria-label="Drift"
                     data-testid="touch-drift"
                     {...bindTouchControl('drift')}
-                    className={`w-[82px] h-[96px] sm:w-[96px] sm:h-[100px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
+                    className={`w-[84px] h-[94px] sm:w-[96px] sm:h-[100px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
                       pressedTouch.drift || hud.isDrifting
                         ? 'bg-[#f59e0b] border-[#fde68a] text-[#0d1520] scale-95'
                         : 'border-[#f59e0b]/85 text-[#fcd34d]'
@@ -842,7 +941,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     <span className="font-display italic font-extrabold text-2xl leading-none">
                       DRIFT
                     </span>
-                    <span className="text-[10px] font-bold tracking-wider uppercase mt-1.5 opacity-90">
+                    <span className="text-[10px] font-bold tracking-wider uppercase mt-1 opacity-90">
                       HOLD
                     </span>
                   </button>
@@ -852,10 +951,10 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     aria-label="Nitro Boost"
                     data-testid="touch-boost"
                     {...bindTouchControl('boost')}
-                    className={`relative overflow-hidden w-[88px] h-[108px] sm:w-[104px] sm:h-[112px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
+                    className={`relative overflow-hidden w-[92px] h-[106px] sm:w-[106px] sm:h-[112px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
                       pressedTouch.boost || hud.isBoosting
                         ? 'border-[#bae6fd] text-white scale-95'
-                        : 'border-[#38bdf8]/90 text-[#e0f2fe]'
+                        : 'border-[#38bdf8]/95 text-[#e0f2fe]'
                     }`}
                     style={{ backgroundColor: 'rgba(13, 20, 31, 0.88)' }}
                   >
@@ -865,8 +964,8 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                         height: `${hud.nitro}%`,
                         backgroundColor:
                           pressedTouch.boost || hud.isBoosting
-                            ? 'rgba(14, 165, 233, 0.90)'
-                            : 'rgba(14, 165, 233, 0.38)',
+                            ? 'rgba(14, 165, 233, 0.92)'
+                            : 'rgba(14, 165, 233, 0.42)',
                       }}
                     />
                     <span className="relative z-10 font-display italic font-extrabold text-2xl leading-none">
@@ -886,7 +985,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     aria-label="Drift"
                     data-testid="touch-drift"
                     {...bindTouchControl('drift')}
-                    className={`w-[82px] h-[60px] sm:w-[94px] sm:h-[64px] rounded-xl border-2 font-display italic font-extrabold text-xl tracking-wider uppercase touch-none cursor-pointer transition-transform shadow-lg ${
+                    className={`w-[84px] h-[56px] sm:w-[94px] sm:h-[62px] rounded-xl border-2 font-display italic font-extrabold text-xl tracking-wider uppercase touch-none cursor-pointer transition-transform shadow-lg ${
                       pressedTouch.drift
                         ? 'bg-[#f59e0b] border-[#fde68a] text-[#0d1520] scale-95'
                         : 'border-[#f59e0b]/80 text-[#fcd34d]'
@@ -903,7 +1002,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     aria-label="Nitro Boost"
                     data-testid="touch-boost"
                     {...bindTouchControl('boost')}
-                    className={`relative overflow-hidden w-[88px] h-[60px] sm:w-[100px] sm:h-[64px] rounded-xl border-2 font-display italic font-extrabold text-xl tracking-wider uppercase touch-none cursor-pointer transition-transform shadow-lg ${
+                    className={`relative overflow-hidden w-[92px] h-[56px] sm:w-[100px] sm:h-[62px] rounded-xl border-2 font-display italic font-extrabold text-xl tracking-wider uppercase touch-none cursor-pointer transition-transform shadow-lg ${
                       pressedTouch.boost || hud.isBoosting
                         ? 'border-[#bae6fd] text-white scale-95'
                         : 'border-[#38bdf8]/85 text-[#7dd3fc]'
@@ -930,7 +1029,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     aria-label="Brake"
                     data-testid="touch-brake"
                     {...bindTouchControl('brake')}
-                    className={`w-[82px] h-[86px] sm:w-[94px] sm:h-[90px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
+                    className={`w-[84px] h-[86px] sm:w-[94px] sm:h-[90px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
                       pressedTouch.brake
                         ? 'bg-[#dc2626] border-[#fca5a5] text-white scale-95'
                         : 'border-[#ef4444]/75 text-[#fca5a5]'
@@ -952,7 +1051,7 @@ export const RaceHud: React.FC<RaceHudProps> = ({
                     aria-label="Accelerate Gas"
                     data-testid="touch-gas"
                     {...bindTouchControl('gas')}
-                    className={`w-[88px] h-[86px] sm:w-[100px] sm:h-[90px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
+                    className={`w-[92px] h-[86px] sm:w-[100px] sm:h-[90px] rounded-2xl border-2 flex flex-col items-center justify-center touch-none cursor-pointer transition-transform shadow-xl ${
                       pressedTouch.gas
                         ? 'bg-[#16a34a] border-[#86efac] text-white scale-95'
                         : 'border-[#22c55e]/85 text-[#86efac]'

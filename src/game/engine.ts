@@ -8,8 +8,10 @@ import {
   buildRaceCars,
   buildRaceResult,
   computeAiInput,
+  computeRearProximity,
   computeStandings,
   detectOvertakeRewards,
+  detectUpcomingCorner,
   resolveCarCollisions,
   stepCarPhysics,
 } from './physics';
@@ -109,6 +111,13 @@ export class RaceEngine {
   private titleOrbitAngle = 0.52;
   private pointerParallaxX = 0;
   private pointerParallaxY = 0;
+  private garageDragging = false;
+  private garageLastPtrX = 0;
+  private garageLastPtrY = 0;
+  private garageUserYaw = 0;
+  private garageUserPitch = 0;
+  private lastPlayerGear = 1;
+  private shiftPopTimer = 0;
   private finishDelayTimer = -1;
 
   // Camera smoothed state
@@ -445,6 +454,7 @@ export class RaceEngine {
     this.playerModelId = modelId;
     const spec = getCarSpec(modelId);
     this.playerLiveryId = spec.defaultLiveryId;
+    this.audio.setCarModel(modelId);
     this.rebuildCarsOnGrid();
     this.emitHud();
   }
@@ -533,6 +543,9 @@ export class RaceEngine {
     this.bannerTimer = 0;
     this.skillCallout = null;
     this.skillCalloutTimer = 0;
+    this.lastPlayerGear = 1;
+    this.shiftPopTimer = 0;
+    this.audio.setCarModel(this.playerModelId);
     this.countdownTimer = skipCountdown ? 0 : 0.75; // Ultra-snappy 3-2-1-GO arcade launch
     this.lastCountdownStep = skipCountdown ? 0 : 4;
 
@@ -859,6 +872,9 @@ export class RaceEngine {
               lap: car.lap,
               totalLaps: TOTAL_LAPS,
               lateralG: -car.steerAngle * Math.min(1.4, Math.abs(car.speed) / 42),
+              raceTime: this.raceTime,
+              isNight: this.trackId === 'tokyo',
+              rearThreat: computeRearProximity(car, this.cars, this.track),
             },
             dt
           );
@@ -874,8 +890,32 @@ export class RaceEngine {
         w.rotation.x = car.wheelSpin;
       }
 
+      // Active Hydraulic DRS Rear Wing / Airbrake Animation (GT3 RS / Chiron / SVJ)
+      if (rig.activeWing) {
+        const wingTargetRotX =
+          car.braking && car.speed > 18
+            ? rig.activeWingBaseRotX + 0.52 // Steep airbrake pitch-up!
+            : car.isBoosting || car.speed > 62
+              ? rig.activeWingBaseRotX - 0.14 // DRS low-drag flat!
+              : rig.activeWingBaseRotX;
+        const wingTargetY =
+          car.braking && car.speed > 18 ? rig.activeWingBaseY + 0.08 : rig.activeWingBaseY;
+        const wLerp = dt > 0 ? Math.min(1, dt * 11) : 1;
+        rig.activeWing.rotation.x += (wingTargetRotX - rig.activeWing.rotation.x) * wLerp;
+        rig.activeWing.position.y += (wingTargetY - rig.activeWing.position.y) * wLerp;
+      }
+
+      // Volumetric Headlight Ground Beam Pools (shining bright on Tokyo Night & subtle alpine glint)
+      const beamOpacity =
+        this.trackId === 'tokyo' ? 0.58 : this.trackId === 'alps' ? 0.14 : 0.0;
+      const showBeams = beamOpacity > 0.01 && car.airY < 0.35;
+      rig.headlightBeamMat.opacity = beamOpacity;
+      for (const beam of rig.headlightBeams) {
+        beam.visible = showBeams;
+      }
+
       // Dynamic brake light glow
-      rig.tailLightMat.emissiveIntensity = car.braking ? 5.2 : 1.6;
+      rig.tailLightMat.emissiveIntensity = car.braking ? 5.6 : this.trackId === 'tokyo' ? 2.6 : 1.6;
 
       // Hit flash visual feedback
       if (car.hitFlash > 0.05) {
@@ -885,12 +925,21 @@ export class RaceEngine {
         rig.paintMat.emissiveIntensity = 0;
       }
 
-      // Dynamic Nitro / Turbo exhaust flames
+      // Dynamic Nitro afterburner flames + orange-amber gear-shift backfire flame pops!
+      const showShiftPop = car.isPlayer && this.shiftPopTimer > 0 && !car.isBoosting;
+      if (car.isBoosting) {
+        rig.flameMat.color.setHex(0x38bdf8);
+      } else if (showShiftPop) {
+        rig.flameMat.color.setHex(0xff8c1a);
+      }
       for (const flame of rig.flames) {
-        flame.visible = car.isBoosting;
+        flame.visible = car.isBoosting || showShiftPop;
         if (car.isBoosting) {
-          const pulse = 0.85 + Math.sin(timeSec * 45 + car.x) * 0.35;
+          const pulse = 0.88 + Math.sin(timeSec * 45 + car.x) * 0.35;
           flame.scale.set(1, 1, pulse);
+        } else if (showShiftPop) {
+          const popScale = Math.min(1, this.shiftPopTimer / 0.11);
+          flame.scale.set(0.85, 0.85, 0.55 * popScale);
         }
       }
 
@@ -974,7 +1023,8 @@ export class RaceEngine {
       yacht.rotation.x = Math.cos(t * 0.95 + i * 2.3) * 0.025;
     }
 
-    this.world.boostPadMat.emissiveIntensity = 1.05 + Math.sin(performance.now() * 0.008) * 0.45;
+    this.world.boostPadMat.emissiveIntensity = 1.15 + Math.sin(performance.now() * 0.008) * 0.4;
+    this.textures.boostPadMap.offset.y = (this.textures.boostPadMap.offset.y - dt * 1.15 + 1) % 1;
 
     // Update gantry countdown lights
     const step = this.countdownTimer > 0 ? Math.ceil(this.countdownTimer / 0.25) : 0;
@@ -1000,13 +1050,23 @@ export class RaceEngine {
     const player = this.getPlayerCar();
 
     if (this.phase === 'title') {
-      // Gentle cinematic hero sway framing supercar + signature map landmarks ahead!
-      this.titleOrbitAngle += dt * 0.42;
+      // Gentle cinematic hero sway + interactive user drag-to-orbit inspection!
+      if (!this.garageDragging) {
+        this.titleOrbitAngle += dt * 0.42;
+      }
       const dist = 6.9;
       const sway = Math.sin(this.titleOrbitAngle) * 0.24;
-      const orbitA = player.heading + Math.PI - 0.56 + sway + this.pointerParallaxX * 0.18;
+      const orbitA =
+        player.heading +
+        Math.PI -
+        0.56 +
+        sway +
+        this.garageUserYaw +
+        this.pointerParallaxX * 0.14;
       const desiredX = player.x + Math.sin(orbitA) * dist;
-      const desiredY = player.y + 2.35 + this.pointerParallaxY * 0.45;
+      const desiredY =
+        player.y +
+        Math.max(1.25, Math.min(4.6, 2.35 + this.garageUserPitch + this.pointerParallaxY * 0.35));
       const desiredZ = player.z + Math.cos(orbitA) * dist;
 
       // Offset look target slightly so car sits cleanly on the right while landmarks fill the horizon!
@@ -1205,7 +1265,7 @@ export class RaceEngine {
       return;
     }
 
-    // Launch countdown (0.25s per step: 3, 2, 1, GO!)
+    // Launch countdown (0.25s per step: 3, 2, 1, GO!) + Perfect Launch detection
     let canDrive = true;
     if (this.countdownTimer > 0) {
       this.countdownTimer = Math.max(0, this.countdownTimer - dt);
@@ -1218,6 +1278,17 @@ export class RaceEngine {
           this.audio.playCountdownBeep(true);
           this.bannerText = 'GO!';
           this.bannerTimer = 0.9;
+          // Perfect Launch reward when revving throttle on GO!
+          const launchInput = this.samplePlayerInput(dt);
+          const playerCar = this.getPlayerCar();
+          if (launchInput.throttle > 0.5 || launchInput.boost) {
+            playerCar.speed = Math.max(playerCar.speed, 16);
+            playerCar.boostPadTimer = Math.max(playerCar.boostPadTimer, 0.72);
+            playerCar.skillScore += 150;
+            this.shiftPopTimer = 0.16;
+            this.audio.playBoostSurge(2);
+            this.triggerSkillCallout('PERFECT LAUNCH! +150');
+          }
         }
       }
       canDrive = this.countdownTimer <= 0;
@@ -1332,13 +1403,24 @@ export class RaceEngine {
       }
     }
 
-    // Continuous engine & tire screech audio
+    // Gear-shift exhaust crackle & backfire flame pop detection
     const player = this.getPlayerCar();
+    this.shiftPopTimer = Math.max(0, this.shiftPopTimer - dt);
+    if (this.phase === 'playing' && canDrive && player.speed > 10 && player.gear !== this.lastPlayerGear) {
+      const upshift = player.gear > this.lastPlayerGear;
+      this.audio.playGearShift(upshift);
+      this.shiftPopTimer = upshift ? 0.12 : 0.09;
+    }
+    this.lastPlayerGear = player.gear;
+
+    // Continuous engine, turbo spool, tire screech & high-speed aerodynamic wind audio
+    const playerSpec = getCarSpec(player.modelId);
     this.audio.updateContinuous(
       player.rpm,
       player.isDrifting && player.airY < 0.1,
       player.isBoosting,
-      this.phase === 'playing'
+      this.phase === 'playing',
+      Math.abs(player.speed) / Math.max(1, playerSpec.topSpeedMs)
     );
 
     this.syncCarVisuals(dt);
@@ -1369,6 +1451,11 @@ export class RaceEngine {
           ? 0
           : -1;
 
+    const upcoming =
+      this.phase === 'playing' && !player.wrongWay
+        ? detectUpcomingCorner(this.track, player.trackS, player.speed)
+        : { direction: null, severity: 0 };
+
     const snapshot: HudSnapshot = {
       phase: this.phase,
       mode: this.mode,
@@ -1398,6 +1485,8 @@ export class RaceEngine {
       countdown: countdownVal,
       wrongWay: player.wrongWay,
       slipstream: player.slipstreamTimer > 0.35,
+      upcomingTurn: upcoming.direction,
+      upcomingTurnSeverity: upcoming.severity,
       bannerText: this.bannerText,
       skillCallout: this.skillCallout,
       cameraMode: this.cameraMode,
@@ -1408,6 +1497,7 @@ export class RaceEngine {
         id: c.id,
         x: c.x,
         z: c.z,
+        heading: c.heading,
         isPlayer: c.isPlayer,
         color: c.liveryColor,
       })),
@@ -1459,6 +1549,7 @@ export class RaceEngine {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.renderer.render(this.scene, this.camera);
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -1527,8 +1618,30 @@ export class RaceEngine {
     }
   };
 
+  private onPointerDown = (e: PointerEvent): void => {
+    if (this.phase !== 'title') return;
+    // Allow dragging anywhere on the open 3D garage canvas (not over UI buttons) to orbit around the car!
+    if (e.target !== this.renderer.domElement) return;
+    this.garageDragging = true;
+    this.garageLastPtrX = e.clientX;
+    this.garageLastPtrY = e.clientY;
+  };
+
+  private onPointerUp = (): void => {
+    this.garageDragging = false;
+  };
+
   private onPointerMove = (e: PointerEvent): void => {
     if (this.phase !== 'title') return;
+    if (this.garageDragging) {
+      const dx = e.clientX - this.garageLastPtrX;
+      const dy = e.clientY - this.garageLastPtrY;
+      this.garageLastPtrX = e.clientX;
+      this.garageLastPtrY = e.clientY;
+      this.garageUserYaw -= dx * 0.0085;
+      this.garageUserPitch = Math.max(-0.9, Math.min(1.8, this.garageUserPitch + dy * 0.007));
+      return;
+    }
     const w = window.innerWidth || 1;
     const h = window.innerHeight || 1;
     this.pointerParallaxX = (e.clientX / w - 0.5) * 2;
@@ -1540,6 +1653,9 @@ export class RaceEngine {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
     window.addEventListener('pointermove', this.onPointerMove);
   }
 
@@ -1551,6 +1667,9 @@ export class RaceEngine {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('pointerdown', this.onPointerDown);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('pointermove', this.onPointerMove);
     this.resizeObserver.disconnect();
 

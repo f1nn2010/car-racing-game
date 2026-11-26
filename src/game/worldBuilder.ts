@@ -1151,6 +1151,7 @@ export function buildWorld(
   });
   const padGeo = new THREE.PlaneGeometry(4.2, 8.8);
   padGeo.rotateX(-Math.PI / 2);
+  padGeo.rotateY(Math.PI); // Canvas top (chevron tip ^) now points strictly FORWARD (+Z)!
 
   for (const pad of track.boostPads) {
     const mesh = new THREE.Mesh(padGeo, boostPadMat);
@@ -1192,14 +1193,18 @@ export function buildWorld(
     rGroup.add(new THREE.Mesh(wedgeGeo, rampSideMat));
 
     const slopeLen = Math.hypot(ramp.length, 1.55);
-    const deck = new THREE.Mesh(new THREE.PlaneGeometry(ramp.width - 0.25, slopeLen), rampDeckMat);
-    deck.rotation.x = -Math.PI / 2 + Math.atan2(1.55, ramp.length);
+    const slopeAngle = Math.atan2(1.55, ramp.length);
+    const deckGeo = new THREE.PlaneGeometry(ramp.width - 0.25, slopeLen);
+    deckGeo.rotateX(-Math.PI / 2);
+    deckGeo.rotateY(Math.PI); // Chevron tip points forward (+Z) up the ramp!
+    const deck = new THREE.Mesh(deckGeo, rampDeckMat);
+    deck.rotation.x = -slopeAngle; // +Z end rises to y=1.55 matching wedgeGeo!
     deck.position.set(0, 0.81, 0);
     rGroup.add(deck);
 
     for (const side of [-1, 1]) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.2, slopeLen), rampGlowEdgeMat);
-      rail.rotation.x = Math.atan2(1.55, ramp.length);
+      rail.rotation.x = -slopeAngle;
       rail.position.set(side * (ramp.width * 0.5 - 0.08), 0.85, 0);
       rGroup.add(rail);
     }

@@ -155,6 +155,8 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   }
   const boostPadMap = new THREE.CanvasTexture(padCanvas);
   boostPadMap.colorSpace = THREE.SRGBColorSpace;
+  boostPadMap.wrapS = THREE.ClampToEdgeWrapping;
+  boostPadMap.wrapT = THREE.RepeatWrapping;
   boostPadMap.anisotropy = aniso;
 
   // 5. Soft Radial Contact Shadow Disc

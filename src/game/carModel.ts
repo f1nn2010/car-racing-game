@@ -10,7 +10,52 @@ export interface CarVisualRig {
   tailLightMat: THREE.MeshStandardMaterial;
   paintMat: THREE.MeshPhysicalMaterial;
   flames: THREE.Mesh[];
+  flameMat: THREE.MeshBasicMaterial;
+  activeWing: THREE.Object3D | null;
+  activeWingBaseRotX: number;
+  activeWingBaseY: number;
+  headlightBeamMat: THREE.MeshBasicMaterial;
+  headlightBeams: THREE.Mesh[];
   dispose: () => void;
+}
+
+let cachedHeadlightBeamTex: THREE.CanvasTexture | null = null;
+function getHeadlightBeamTexture(): THREE.CanvasTexture {
+  if (cachedHeadlightBeamTex) return cachedHeadlightBeamTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createLinearGradient(0, 256, 0, 0);
+  grad.addColorStop(0.0, 'rgba(255, 250, 232, 0.92)');
+  grad.addColorStop(0.28, 'rgba(244, 248, 255, 0.45)');
+  grad.addColorStop(0.68, 'rgba(218, 236, 255, 0.14)');
+  grad.addColorStop(1.0, 'rgba(200, 226, 255, 0.0)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(46, 256);
+  ctx.lineTo(82, 256);
+  ctx.lineTo(124, 0);
+  ctx.lineTo(4, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Soft lateral radial falloff
+  ctx.globalCompositeOperation = 'destination-in';
+  const sideGrad = ctx.createLinearGradient(0, 0, 128, 0);
+  sideGrad.addColorStop(0.0, 'rgba(255,255,255,0)');
+  sideGrad.addColorStop(0.22, 'rgba(255,255,255,0.85)');
+  sideGrad.addColorStop(0.5, 'rgba(255,255,255,1)');
+  sideGrad.addColorStop(0.78, 'rgba(255,255,255,0.85)');
+  sideGrad.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sideGrad;
+  ctx.fillRect(0, 0, 128, 256);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cachedHeadlightBeamTex = tex;
+  return tex;
 }
 
 function createExtrudedProfile(
@@ -406,6 +451,9 @@ export function createCarModel(
   let wheelRadiusF = 0.35;
   let wheelRadiusR = 0.38;
   let spokeCount = 5;
+  let activeWing: THREE.Object3D | null = null;
+  let activeWingBaseRotX = 0.12;
+  let activeWingBaseY = 1.2;
 
   if (modelId === 'gt3rs') {
     // =========================================================================
@@ -565,6 +613,9 @@ export function createCarModel(
     wingFlap.position.set(0, 1.50, -2.16);
     wingFlap.rotation.x = 0.20;
     chassis.add(wingFlap);
+    activeWing = wingFlap;
+    activeWingBaseRotX = 0.20;
+    activeWingBaseY = 1.50;
 
     for (const side of [-1, 1]) {
       const upright = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.68, 0.18), chromeMat);
@@ -738,11 +789,14 @@ export function createCarModel(
     chassis.add(ebBadge);
 
     // 6. ACTIVE REAR AIRBRAKE WING + FULL-WIDTH LASER TAILLIGHT BLADE + QUAD EXHAUST
-    const activeWing = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.055, 0.36), paintMat);
-    activeWing.position.set(0, 1.08, -2.08);
-    activeWing.rotation.x = 0.12;
-    activeWing.castShadow = true;
-    chassis.add(activeWing);
+    const chironWing = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.055, 0.36), paintMat);
+    chironWing.position.set(0, 1.08, -2.08);
+    chironWing.rotation.x = 0.12;
+    chironWing.castShadow = true;
+    chassis.add(chironWing);
+    activeWing = chironWing;
+    activeWingBaseRotX = 0.12;
+    activeWingBaseY = 1.08;
     for (const side of [-1, 1]) {
       const strut = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.24, 0.10), chromeMat);
       strut.position.set(side * 0.56, 0.94, -2.04);
@@ -977,6 +1031,9 @@ export function createCarModel(
     svjWing.rotation.x = 0.09;
     svjWing.castShadow = true;
     chassis.add(svjWing);
+    activeWing = svjWing;
+    activeWingBaseRotX = 0.09;
+    activeWingBaseY = 1.24;
 
     const centerFin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.58), carbonMat);
     centerFin.position.set(0, 1.04, -1.96);
@@ -1038,12 +1095,34 @@ export function createCarModel(
   const shadowMat = new THREE.MeshBasicMaterial({
     map: textures.contactShadowMap,
     transparent: true,
-    opacity: 0.64,
+    opacity: 0.68,
     depthWrite: false,
   });
   const shadowPlane = new THREE.Mesh(shadowGeo, shadowMat);
   shadowPlane.position.set(0, 0.025, 0);
   root.add(shadowPlane);
+
+  // Volumetric LED Headlight Ground Beam Cones (dramatic on Tokyo Night, crisp daytime glint)
+  const headlightBeamMat = new THREE.MeshBasicMaterial({
+    map: getHeadlightBeamTexture(),
+    color: 0xfff8e6,
+    transparent: true,
+    opacity: 0.0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const headlightBeams: THREE.Mesh[] = [];
+  const beamGeo = new THREE.PlaneGeometry(3.9, 18.0);
+  beamGeo.rotateX(-Math.PI / 2);
+  beamGeo.rotateY(Math.PI); // Narrow bright origin sits right at headlights (-Z), widens forward (+Z)!
+  for (const side of [-1, 1]) {
+    const beam = new THREE.Mesh(beamGeo, headlightBeamMat);
+    beam.position.set(side * 0.76, 0.068, 11.2);
+    beam.rotation.y = side * -0.05;
+    beam.visible = false;
+    root.add(beam);
+    headlightBeams.push(beam);
+  }
 
   const dispose = () => {
     root.traverse((obj) => {
@@ -1069,6 +1148,7 @@ export function createCarModel(
     tailLightMat.dispose();
     flameMat.dispose();
     shadowMat.dispose();
+    headlightBeamMat.dispose();
   };
 
   return {
@@ -1079,6 +1159,12 @@ export function createCarModel(
     tailLightMat,
     paintMat,
     flames,
+    flameMat,
+    activeWing,
+    activeWingBaseRotX,
+    activeWingBaseY,
+    headlightBeamMat,
+    headlightBeams,
     dispose,
   };
 }

@@ -881,6 +881,7 @@ export function buildRaceResult(
 
   return {
     mode,
+    trackId: track.id,
     trackName: trackMeta.name,
     carName: spec.name,
     position,
@@ -893,4 +894,68 @@ export function buildRaceResult(
     isPodium: mode === 'time-trial' || position <= 3,
     standings,
   };
+}
+
+/**
+ * Pure rally-style corner anticipation helper: scans curvature 45m–112m ahead
+ * when traveling at high speed and returns upcoming turn direction & severity (0..1).
+ */
+export function detectUpcomingCorner(
+  track: TrackData,
+  trackS: number,
+  speedMs: number
+): { direction: 'left' | 'right' | null; severity: number } {
+  if (speedMs < 28) {
+    return { direction: null, severity: 0 };
+  }
+  const nearD = Math.min(48, 30 + speedMs * 0.22);
+  const probes = [nearD, nearD + 16, nearD + 32, nearD + 48, nearD + 64, nearD + 80];
+  let peakSigned = 0;
+  for (const dist of probes) {
+    const sample = getSampleAtDistance(track, trackS + dist);
+    if (Math.abs(sample.curvature) > Math.abs(peakSigned)) {
+      peakSigned = sample.curvature;
+    }
+  }
+  const absC = Math.abs(peakSigned);
+  if (absC < 0.0068) {
+    return { direction: null, severity: 0 };
+  }
+  const severity = Math.min(1, (absC - 0.0068) / 0.0085);
+  return {
+    direction: peakSigned > 0 ? 'right' : 'left',
+    severity,
+  };
+}
+
+/**
+ * Computes rear rival proximity threat intensities (0..1) in left / center / right lanes
+ * within 34 meters behind the player car — drives the live 3D Cockpit Rearview Mirror Radar!
+ */
+export function computeRearProximity(
+  player: CarState,
+  allCars: CarState[],
+  track: TrackData
+): { left: number; center: number; right: number } {
+  let left = 0;
+  let center = 0;
+  let right = 0;
+  const maxDist = 34;
+
+  for (const other of allCars) {
+    if (other.id === player.id) continue;
+    const distBehind = (player.trackS - other.trackS + track.totalLength) % track.totalLength;
+    if (distBehind > 1.5 && distBehind < maxDist) {
+      const intensity = Math.max(0, Math.min(1, 1 - distBehind / maxDist));
+      const latDelta = other.lateralOffset - player.lateralOffset;
+      if (latDelta < -1.8) {
+        left = Math.max(left, intensity);
+      } else if (latDelta > 1.8) {
+        right = Math.max(right, intensity);
+      } else {
+        center = Math.max(center, intensity);
+      }
+    }
+  }
+  return { left, center, right };
 }

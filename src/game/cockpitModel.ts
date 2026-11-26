@@ -15,6 +15,9 @@ export interface CockpitTelemetry {
   lap: number;
   totalLaps: number;
   lateralG: number;
+  raceTime: number;
+  isNight: boolean;
+  rearThreat: { left: number; center: number; right: number };
 }
 
 export interface CockpitRig {
@@ -236,59 +239,66 @@ export function createCockpitModel(
 
   // Sleek modern GT3 RS / Hypercar floating carbon OLED display housing & top anti-glare visor
   const binnacleBack = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.555, 0.245, 0.04)), carbonMat);
-  binnacleBack.position.set(0, 0.902, 0.768);
-  binnacleBack.rotation.x = -0.07;
+  binnacleBack.position.set(0, 0.902, 0.778);
   cabin.add(binnacleBack);
 
   // Subtle top carbon overhang visor cleanly ABOVE the OLED cluster (zero RPM bar obstruction!)
-  const glareVisor = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.565, 0.02, 0.11)), alcantaraMat);
-  glareVisor.position.set(0, 1.038, 0.735);
-  glareVisor.rotation.x = -0.04;
+  const glareVisor = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.565, 0.018, 0.10)), alcantaraMat);
+  glareVisor.position.set(0, 1.034, 0.745);
   cabin.add(glareVisor);
 
-  // Sport Chrono Stopwatch Pod on center-right dash with crisp dial face!
+  // Sport Chrono Stopwatch Pod on center-right dash with crisp dial face + live rotating sweep hand!
   const chronoCanvas = document.createElement('canvas');
   chronoCanvas.width = 128;
   chronoCanvas.height = 128;
   const chCtx = chronoCanvas.getContext('2d')!;
-  chCtx.fillStyle = '#090d16';
-  chCtx.fillRect(0, 0, 128, 128);
-  chCtx.strokeStyle = '#cbd5e1';
-  chCtx.lineWidth = 4;
-  chCtx.beginPath();
-  chCtx.arc(64, 64, 54, 0, Math.PI * 2);
-  chCtx.stroke();
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    chCtx.strokeStyle = i % 3 === 0 ? '#f8fafc' : '#64748b';
-    chCtx.lineWidth = i % 3 === 0 ? 3 : 2;
-    chCtx.beginPath();
-    chCtx.moveTo(64 + Math.cos(a) * 42, 64 + Math.sin(a) * 42);
-    chCtx.lineTo(64 + Math.cos(a) * 50, 64 + Math.sin(a) * 50);
-    chCtx.stroke();
-  }
-  chCtx.strokeStyle = '#ef4444';
-  chCtx.lineWidth = 3;
-  chCtx.beginPath();
-  chCtx.moveTo(64, 64);
-  chCtx.lineTo(64, 22);
-  chCtx.stroke();
   const chronoTex = new THREE.CanvasTexture(chronoCanvas);
   chronoTex.colorSpace = THREE.SRGBColorSpace;
   disposables.push(chronoTex);
 
+  const drawChrono = (sec: number) => {
+    chCtx.fillStyle = '#090d16';
+    chCtx.fillRect(0, 0, 128, 128);
+    chCtx.strokeStyle = '#cbd5e1';
+    chCtx.lineWidth = 4;
+    chCtx.beginPath();
+    chCtx.arc(64, 64, 54, 0, Math.PI * 2);
+    chCtx.stroke();
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      chCtx.strokeStyle = i % 3 === 0 ? '#f8fafc' : '#64748b';
+      chCtx.lineWidth = i % 3 === 0 ? 3 : 2;
+      chCtx.beginPath();
+      chCtx.moveTo(64 + Math.cos(a) * 42, 64 + Math.sin(a) * 42);
+      chCtx.lineTo(64 + Math.cos(a) * 50, 64 + Math.sin(a) * 50);
+      chCtx.stroke();
+    }
+    const needleAngle = -Math.PI / 2 + ((sec % 60) / 60) * Math.PI * 2;
+    chCtx.strokeStyle = '#ef4444';
+    chCtx.lineWidth = 3.5;
+    chCtx.beginPath();
+    chCtx.moveTo(64, 64);
+    chCtx.lineTo(64 + Math.cos(needleAngle) * 42, 64 + Math.sin(needleAngle) * 42);
+    chCtx.stroke();
+    chCtx.fillStyle = '#f8fafc';
+    chCtx.beginPath();
+    chCtx.arc(64, 64, 5, 0, Math.PI * 2);
+    chCtx.fill();
+    chronoTex.needsUpdate = true;
+  };
+  drawChrono(0);
+
   const chronoBezel = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(0.052, 0.056, 0.07, 22)), darkMetalMat);
-  chronoBezel.rotation.x = Math.PI / 2 - 0.16;
-  chronoBezel.position.set(-0.44, 0.895, 0.78);
+  chronoBezel.rotation.x = Math.PI / 2;
+  chronoBezel.position.set(-0.44, 0.902, 0.782);
   cabin.add(chronoBezel);
 
   const chronoFace = new THREE.Mesh(
-    trackGeo(new THREE.CircleGeometry(0.044, 22)),
+    trackGeo(new THREE.CircleGeometry(0.046, 22)),
     trackMat(new THREE.MeshBasicMaterial({ map: chronoTex, toneMapped: false }))
   );
   chronoFace.rotation.y = Math.PI;
-  chronoFace.rotation.x = 0.16;
-  chronoFace.position.set(-0.44, 0.892, 0.742);
+  chronoFace.position.set(-0.44, 0.902, 0.744);
   cabin.add(chronoFace);
 
   // Sculpted Center Console & Carbon Tunnel on driver's right (-X)
@@ -325,10 +335,9 @@ export function createCockpitModel(
     })
   );
   // Flush in front of binnacleBack so RPM bar, Speed, Gear & Nitro are 100% visible!
-  const dashScreen = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.505, 0.21)), dashScreenMat);
-  dashScreen.position.set(0, 0.905, 0.742);
+  const dashScreen = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.515, 0.218)), dashScreenMat);
+  dashScreen.position.set(0, 0.902, 0.752);
   dashScreen.rotation.y = Math.PI;
-  dashScreen.rotation.x = 0.07;
   cabin.add(dashScreen);
 
   // Center console secondary telemetry screen (angled cleanly toward driver)
@@ -542,16 +551,27 @@ export function createCockpitModel(
   roofHeader.rotation.x = 0.12;
   cabin.add(roofHeader);
 
-  // Compact aerodynamic rearview mirror tucked gracefully near top of windshield
+  // Compact aerodynamic digital rearview mirror with live Rear Rival Proximity Radar!
+  const mirrorCanvas = document.createElement('canvas');
+  mirrorCanvas.width = 256;
+  mirrorCanvas.height = 64;
+  const mirrorCtx = mirrorCanvas.getContext('2d')!;
+  const mirrorTex = new THREE.CanvasTexture(mirrorCanvas);
+  mirrorTex.colorSpace = THREE.SRGBColorSpace;
+  disposables.push(mirrorTex);
+
   const mirrorStem = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(0.008, 0.008, 0.075, 8)), darkMetalMat);
   mirrorStem.position.set(-0.24, 1.53, 0.56);
   cabin.add(mirrorStem);
 
-  const rearMirrorHousing = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.185, 0.05, 0.026)), darkMetalMat);
+  const rearMirrorHousing = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.195, 0.054, 0.026)), darkMetalMat);
   rearMirrorHousing.position.set(-0.24, 1.485, 0.56);
   cabin.add(rearMirrorHousing);
 
-  const rearMirrorGlass = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.168, 0.038)), mirrorGlassMat);
+  const rearMirrorGlass = new THREE.Mesh(
+    trackGeo(new THREE.PlaneGeometry(0.178, 0.042)),
+    trackMat(new THREE.MeshBasicMaterial({ map: mirrorTex, toneMapped: false }))
+  );
   rearMirrorGlass.position.set(-0.24, 1.485, 0.545);
   rearMirrorGlass.rotation.y = Math.PI;
   cabin.add(rearMirrorGlass);
@@ -768,6 +788,67 @@ export function createCockpitModel(
     c.fillText(t.isBoosting ? 'TURBO MAX' : t.isDrifting ? 'SLIP ANGLE' : 'TRACK GRIP', 128, 180);
 
     consoleTex.needsUpdate = true;
+
+    // Live Digital Rearview Mirror with Rear Horizon & Rival Proximity Radar
+    const m = mirrorCtx;
+    const skyGrad = m.createLinearGradient(0, 0, 0, 32);
+    if (t.isNight) {
+      skyGrad.addColorStop(0, '#070b18');
+      skyGrad.addColorStop(1, '#1c1836');
+    } else {
+      skyGrad.addColorStop(0, '#1e4a82');
+      skyGrad.addColorStop(1, '#6fa5d6');
+    }
+    m.fillStyle = skyGrad;
+    m.fillRect(0, 0, 256, 30);
+
+    // Asphalt road perspective behind car
+    m.fillStyle = t.isNight ? '#111622' : '#252e3a';
+    m.fillRect(0, 30, 256, 34);
+    m.strokeStyle = 'rgba(255,255,255,0.22)';
+    m.lineWidth = 2;
+    m.beginPath();
+    m.moveTo(108, 30);
+    m.lineTo(36, 64);
+    m.moveTo(148, 30);
+    m.lineTo(220, 64);
+    m.stroke();
+
+    // Glowing Rival Proximity Zones (Left / Center / Right)
+    const drawThreat = (x: number, w: number, intensity: number) => {
+      if (intensity <= 0.05) return;
+      const hot = intensity > 0.6;
+      m.fillStyle = hot
+        ? `rgba(239, 68, 68, ${0.35 + intensity * 0.55})`
+        : `rgba(245, 158, 11, ${0.28 + intensity * 0.5})`;
+      m.fillRect(x, 6, w, 52);
+      // Pair of approaching rival LED headlights in the mirror!
+      const lampY = 38 + intensity * 12;
+      const lampSpread = 10 + intensity * 14;
+      const cx = x + w * 0.5;
+      m.fillStyle = '#ffffff';
+      m.beginPath();
+      m.arc(cx - lampSpread * 0.5, lampY, 2.5 + intensity * 2.5, 0, Math.PI * 2);
+      m.arc(cx + lampSpread * 0.5, lampY, 2.5 + intensity * 2.5, 0, Math.PI * 2);
+      m.fill();
+    };
+    drawThreat(6, 74, t.rearThreat.left);
+    drawThreat(91, 74, t.rearThreat.center);
+    drawThreat(176, 74, t.rearThreat.right);
+
+    const anyThreat =
+      t.rearThreat.left > 0.05 || t.rearThreat.center > 0.05 || t.rearThreat.right > 0.05;
+    m.strokeStyle = anyThreat ? '#ef4444' : 'rgba(148,163,184,0.35)';
+    m.lineWidth = 3;
+    m.strokeRect(2, 2, 252, 60);
+    m.fillStyle = anyThreat ? '#fca5a5' : 'rgba(226,232,240,0.65)';
+    m.font = 'bold 10px sans-serif';
+    m.textAlign = 'center';
+    m.fillText(anyThreat ? 'RIVAL CLOSING' : 'REAR CAM', 128, 15);
+    mirrorTex.needsUpdate = true;
+
+    // Live Sport Chrono Sweep
+    drawChrono(t.raceTime);
   };
 
   drawInstrumentCluster({
@@ -783,6 +864,9 @@ export function createCockpitModel(
     lap: 1,
     totalLaps: 3,
     lateralG: 0,
+    raceTime: 0,
+    isNight: false,
+    rearThreat: { left: 0, center: 0, right: 0 },
   });
 
   const update = (car: CarState, telemetry: CockpitTelemetry, dt: number) => {

@@ -3,6 +3,12 @@ import { FinishModal, PauseModal } from './components/GameModal';
 import { RaceHud } from './components/RaceHud';
 import { TitleOverlay } from './components/TitleOverlay';
 import { RaceEngine } from './game/engine';
+import {
+  RecordsMap,
+  loadTrackRecords,
+  mergeRaceIntoRecords,
+  saveTrackRecords,
+} from './game/records';
 import { TOTAL_LAPS } from './game/track';
 import {
   CarModelId,
@@ -44,6 +50,8 @@ const INITIAL_HUD: HudSnapshot = {
   countdown: -1,
   wrongWay: false,
   slipstream: false,
+  upcomingTurn: null,
+  upcomingTurnSeverity: 0,
   bannerText: null,
   skillCallout: null,
   cameraMode: 'chase',
@@ -73,6 +81,8 @@ export default function App() {
   const [selectedMode, setSelectedMode] = useState<GameMode>('grand-prix');
   const [hud, setHud] = useState<HudSnapshot>(INITIAL_HUD);
   const [raceResult, setRaceResult] = useState<RaceResult | null>(null);
+  const [trackRecords, setTrackRecords] = useState<RecordsMap>(() => loadTrackRecords());
+  const trackRecordsRef = useRef<RecordsMap>(trackRecords);
   const [showTouchControls, setShowTouchControls] = useState<boolean>(() =>
     detectTouchOrMobileViewport()
   );
@@ -120,7 +130,21 @@ export default function App() {
       {
         onHudUpdate: (snapshot) => setHud(snapshot),
         onPhaseChange: (nextPhase) => setPhase(nextPhase),
-        onRaceFinish: (result) => setRaceResult(result),
+        onRaceFinish: (result) => {
+          const merged = mergeRaceIntoRecords(trackRecordsRef.current, result.trackId, {
+            bestLapSec: result.bestLapTime,
+            totalRaceSec: result.totalTime,
+            position: result.position,
+            isGrandPrix: result.mode === 'grand-prix',
+          });
+          trackRecordsRef.current = merged.updated;
+          setTrackRecords(merged.updated);
+          saveTrackRecords(merged.updated);
+          setRaceResult({
+            ...result,
+            newTrackRecord: merged.newBestLap || merged.newBestRace,
+          });
+        },
       },
       {
         autostart,
@@ -212,6 +236,7 @@ export default function App() {
           selectedCar={selectedCar}
           selectedLivery={selectedLivery}
           selectedMode={selectedMode}
+          trackRecords={trackRecords}
           onSelectTrack={handleSelectTrack}
           onSelectCar={handleSelectCar}
           onSelectLivery={handleSelectLivery}

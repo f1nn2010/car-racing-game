@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { RecordsMap } from '../game/records';
 import {
   CarModelId,
   GAME_THUMBNAIL_URL,
@@ -10,12 +11,14 @@ import {
   getCarSpec,
   getTrackMeta,
 } from '../game/types';
+import { formatRaceTime } from './RaceHud';
 
 interface TitleOverlayProps {
   selectedTrack: TrackId;
   selectedCar: CarModelId;
   selectedLivery: string;
   selectedMode: GameMode;
+  trackRecords: RecordsMap;
   onSelectTrack: (id: TrackId) => void;
   onSelectCar: (id: CarModelId) => void;
   onSelectLivery: (id: string) => void;
@@ -28,6 +31,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   selectedCar,
   selectedLivery,
   selectedMode,
+  trackRecords,
   onSelectTrack,
   onSelectCar,
   onSelectLivery,
@@ -155,6 +159,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Select racing circuit">
               {TRACK_LIST.map((trk) => {
                 const active = trk.id === selectedTrack;
+                const rec = trackRecords[trk.id];
                 return (
                   <button
                     key={trk.id}
@@ -199,6 +204,14 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                         className="absolute inset-x-0 top-0 h-[3px]"
                         style={{ backgroundColor: trk.themeColor }}
                       />
+                    )}
+                    {rec?.bestLapSec !== null && rec?.bestLapSec !== undefined && (
+                      <div
+                        className="absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded text-[9px] font-display font-bold tabular-nums text-[#fde68a]"
+                        style={{ backgroundColor: 'rgba(10, 16, 26, 0.85)' }}
+                      >
+                        ★ {formatRaceTime(rec.bestLapSec)}
+                      </div>
                     )}
                     <div className="relative z-10 h-full flex flex-col justify-end p-2">
                       <div className="font-display italic font-extrabold text-sm sm:text-base leading-none text-white">
@@ -352,7 +365,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           WASD / Arrows Drive · Space Drift · Shift Nitro · C Camera · Esc Pause
         </span>
         <span className="hidden sm:inline text-[#f4efe2]/75">
-          Seamless Touch Arrows &amp; Slide Steering Built-In
+          Drag 3D View to Inspect Car · Hold Gas on GO for Perfect Launch
         </span>
       </div>
     </div>

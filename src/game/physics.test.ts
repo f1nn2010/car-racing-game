@@ -1,16 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { computeJoystickSteer } from './controls';
 import {
   PhysicsEvent,
   buildRaceCars,
   buildRaceResult,
   computeAiInput,
   computeGearAndRpm,
+  computeRearProximity,
   detectOvertakeRewards,
+  detectUpcomingCorner,
   resolveCarCollisions,
   stepCarPhysics,
   updateCheckpointsAndLaps,
 } from './physics';
+import {
+  computeMedalTier,
+  createEmptyRecords,
+  mergeRaceIntoRecords,
+} from './records';
 import {
   BARRIER_OFFSET,
   NUM_CHECKPOINTS,
@@ -292,4 +300,93 @@ test('upgraded AI bots race cleanly at high speed around corners without wall-pi
   const gr = computeGearAndRpm(65, 80);
   assert.ok(gr.gear >= 4 && gr.gear <= 6);
   assert.ok(gr.rpm > 0.3 && gr.rpm <= 1.0);
+});
+
+test('detectUpcomingCorner warns before sharp bends at high speed and stays silent when slow', () => {
+  const track = createTrack('alps', 720);
+  // Find sharpest curve sample on Alpen Pass
+  let peakSample = track.samples[0];
+  for (const s of track.samples) {
+    if (Math.abs(s.curvature) > Math.abs(peakSample.curvature)) {
+      peakSample = s;
+    }
+  }
+  const approachS = (peakSample.s - 65 + track.totalLength) % track.totalLength;
+  const fastWarn = detectUpcomingCorner(track, approachS, 62);
+  assert.equal(fastWarn.direction, peakSample.curvature > 0 ? 'right' : 'left');
+  assert.ok(fastWarn.severity > 0, 'expected non-zero corner severity');
+
+  const slowWarn = detectUpcomingCorner(track, approachS, 18);
+  assert.equal(slowWarn.direction, null);
+  assert.equal(slowWarn.severity, 0);
+});
+
+test('computeRearProximity detects close rivals in left, center, and right lanes behind player', () => {
+  const track = createTrack('riviera', 720);
+  const rivals = buildRivalLineup('gt3rs');
+  const cars = buildRaceCars(track, 'grand-prix', 'gt3rs', 'weissach', rivals);
+  const player = cars.find((c) => c.isPlayer)!;
+  const r0 = cars.find((c) => !c.isPlayer)!;
+
+  player.trackS = 400;
+  player.lateralOffset = 0;
+  // Place rival 10m directly behind on the left lane
+  r0.trackS = 390;
+  r0.lateralOffset = -3.0;
+  const threatLeft = computeRearProximity(player, [player, r0], track);
+  assert.ok(threatLeft.left > 0.65, `Expected strong left rear threat, got ${threatLeft.left}`);
+  assert.equal(threatLeft.center, 0);
+  assert.equal(threatLeft.right, 0);
+
+  // Move rival directly behind center bumper
+  r0.lateralOffset = 0.2;
+  const threatCenter = computeRearProximity(player, [player, r0], track);
+  assert.ok(threatCenter.center > 0.65);
+});
+
+test('track records merge best laps/races and compute motorsport medal tiers accurately', () => {
+  let recs = createEmptyRecords();
+  const first = mergeRaceIntoRecords(recs, 'tokyo', {
+    bestLapSec: 41.5,
+    totalRaceSec: 129.0,
+    position: 2,
+    isGrandPrix: true,
+  });
+  assert.equal(first.newBestLap, true);
+  assert.equal(first.newBestRace, true);
+  assert.equal(first.updated.tokyo.bestPosition, 2);
+  assert.equal(first.updated.tokyo.racesCompleted, 1);
+
+  // Slower run should NOT overwrite best lap or position
+  const slower = mergeRaceIntoRecords(first.updated, 'tokyo', {
+    bestLapSec: 44.2,
+    totalRaceSec: 135.0,
+    position: 3,
+    isGrandPrix: true,
+  });
+  assert.equal(slower.newBestLap, false);
+  assert.equal(slower.newBestRace, false);
+  assert.equal(slower.updated.tokyo.bestLapSec, 41.5);
+  assert.equal(slower.updated.tokyo.bestPosition, 2);
+  assert.equal(slower.updated.tokyo.racesCompleted, 2);
+
+  assert.equal(computeMedalTier({ mode: 'grand-prix', position: 1, bestLapSec: 42 }), 'gold');
+  assert.equal(computeMedalTier({ mode: 'grand-prix', position: 2, bestLapSec: 42 }), 'silver');
+  assert.equal(computeMedalTier({ mode: 'grand-prix', position: 4, bestLapSec: 42 }), 'none');
+  assert.equal(computeMedalTier({ mode: 'time-trial', position: 1, bestLapSec: 36.8 }), 'gold');
+});
+
+test('mobile steering joystick applies center deadzone, smooth precision curve, and clamps circular knob', () => {
+  const center = computeJoystickSteer(2, -15, 60);
+  assert.equal(center.steer, 0, 'small jitter inside center deadzone should track dead straight');
+  assert.ok(Math.abs(center.knobY) <= 1);
+
+  const rightHalf = computeJoystickSteer(30, 0, 60);
+  const leftHalf = computeJoystickSteer(-30, 0, 60);
+  assert.ok(rightHalf.steer > 0.3 && rightHalf.steer < 0.75);
+  assert.equal(leftHalf.steer, -rightHalf.steer, 'left and right steering should be symmetric');
+
+  const farCorner = computeJoystickSteer(140, -140, 60);
+  assert.equal(farCorner.steer, 1);
+  assert.ok(Math.hypot(farCorner.knobX, farCorner.knobY) <= 1.001, 'visual knob must stay inside circular ring');
 });
